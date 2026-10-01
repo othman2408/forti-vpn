@@ -28,6 +28,8 @@ Open **Forti VPN** from your applications menu. Use **Set Up FortiClient** if ne
 
 Select a profile and click **Connect**. Enter your password and MFA code when prompted.
 
+Profiles and status are checked once at launch. Use the refresh button to check again.
+
 Use **Manage Profile** for profile actions and **Settings** for preferences and diagnostics.
 
 Closing the window keeps the app in the top bar by default. Use **Disconnect and Quit** to disconnect and exit, or change the close behavior in Settings. Top-bar integration requires AppIndicator support.

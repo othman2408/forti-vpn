@@ -508,6 +508,22 @@ class UITests(unittest.TestCase):
         pump(.3)
         self.assertIsNone(self.window.settings_window)
 
+    def test_refresh_only_on_launch_and_manual_request(self):
+        from forti_vpn.ui import UtilityWindow
+        with patch.object(Workflow, 'refresh') as refresh:
+            window = UtilityWindow(self.app)
+            try:
+                refresh.assert_called_once()
+                refresh.reset_mock()
+                window.present()
+                window.notify('is-active')
+                pump(3.5)
+                refresh.assert_not_called()
+                window.refresh_button.emit('clicked')
+                refresh.assert_called_once()
+            finally:
+                window.shutdown()
+
     def test_missing_cli_setup_screen_and_check_again_recovery(self):
         from forti_vpn.backend import CLINotFound
         state = self.window.workflow.state

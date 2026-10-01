@@ -173,20 +173,14 @@ class UtilityWindow(Adw.ApplicationWindow):
         self.toast_overlay.set_child(root)
         self.set_content(self.toast_overlay)
         self.connect('close-request', self.close_request)
-        self.connect('notify::is-active', lambda *_: self.workflow.refresh() if self.is_active() else None)
         self.style_handler = Adw.StyleManager.get_default().connect('notify::high-contrast',
             lambda *_: self.render(self.workflow.state))
         self.animations_handler = Gtk.Settings.get_default().connect('notify::gtk-enable-animations',
             self.animation_preference_changed)
-        self.timer = GLib.timeout_add_seconds(3, self.tick)
         self.prepared_editor = ProfileEditor(self, None)
         self.prepared_editor.get_child().measure(Gtk.Orientation.VERTICAL, 420)
         self.editor_prepare_source = None
         self.workflow.refresh()
-
-    def tick(self):
-        self.workflow.refresh()
-        return GLib.SOURCE_CONTINUE
 
     def selected(self):
         index = self.profile_row.get_selected()
@@ -566,7 +560,6 @@ class UtilityWindow(Adw.ApplicationWindow):
         if self.editor_prepare_source is not None:
             GLib.source_remove(self.editor_prepare_source)
         self.prepared_editor = None
-        GLib.source_remove(self.timer)
         Adw.StyleManager.get_default().disconnect(self.style_handler)
         Gtk.Settings.get_default().disconnect(self.animations_handler)
         for dialog in list(self.get_dialogs()):
