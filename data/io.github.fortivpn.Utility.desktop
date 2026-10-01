@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Forti VPN
+Comment=Daily FortiClient VPN operations
+Exec=forti-vpn
+Icon=io.github.fortivpn.Utility
+Terminal=false
+Categories=Network;
+StartupNotify=true
