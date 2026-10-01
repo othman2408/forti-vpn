@@ -224,6 +224,7 @@ class UITests(unittest.TestCase):
         self.assertEqual(self.window.connected_profile.get_subtitle(), 'Other VPN')
         self.assertEqual(self.window.connected_server.get_subtitle(), 'vpn.example.org:443')
         self.assertFalse(self.window.primary.has_css_class('suggested-action'))
+        self.assertTrue(self.window.primary.has_css_class('destructive-action'))
         state.busy = 'disconnecting'
         self.window.render(state)
         self.assertFalse(self.window.primary.get_sensitive())
@@ -235,6 +236,7 @@ class UITests(unittest.TestCase):
         self.assertTrue(self.window.credentials.get_visible())
         self.assertFalse(self.window.connection_summary.get_visible())
         self.assertTrue(self.window.primary.has_css_class('suggested-action'))
+        self.assertFalse(self.window.primary.has_css_class('destructive-action'))
         self.assertEqual(self.window.username.get_text(), 'edited username')
         self.assertTrue(self.window.remember.get_active())
         state.profiles.pop()
@@ -247,7 +249,7 @@ class UITests(unittest.TestCase):
         self.assertTrue(self.window.view_button.get_sensitive())
         self.assertFalse(self.window.edit_button.get_sensitive())
         self.assertFalse(self.window.delete_button.get_sensitive())
-        self.assertIn('Disconnect', self.window.profile_lock_note.get_text())
+        self.assertIn('Disconnect', self.window.edit_button.get_tooltip_text())
         self.window.manage_button.popup()
         pump()
         self.window.view_button.grab_focus()
@@ -259,9 +261,25 @@ class UITests(unittest.TestCase):
         state.status = Status('disconnected')
         state.profiles[0] = Profile('Office VPN', managed=True)
         self.window.render(state)
-        self.assertIn('organization', self.window.profile_lock_note.get_text())
+        self.assertIn('organization', self.window.delete_button.get_tooltip_text())
         self.assertFalse(self.window.edit_button.get_sensitive())
         state.profiles[0] = Profile('Office VPN', {'Remote Gateway': 'localhost:443', 'Username': 'worker'})
+
+    def test_prepared_editor_populates_latest_profile_and_replenishes_after_close(self):
+        self.window.prepare_editor()
+        prepared = self.window.prepared_editor
+        profile = Profile('Updated VPN', {'Remote Gateway': 'updated.example.org', 'Username': 'updated user'})
+        self.window.profile_editor(profile)
+        self.assertIs(self.window.profile_dialog, prepared)
+        self.assertEqual(prepared.gateway.get_text(), 'updated.example.org')
+        self.assertEqual(prepared.username.get_text(), 'updated user')
+        prepared.close()
+        pump(.7)
+        self.assertIsNotNone(self.window.prepared_editor)
+        self.assertIsNot(self.window.prepared_editor, prepared)
+        self.window.profile_editor(None)
+        self.assertEqual(self.window.profile_dialog.name.get_text(), '')
+        self.assertEqual(self.window.profile_dialog.gateway.get_text(), '')
 
     def test_profile_forms_and_details_construct(self):
         for profile, title in ((None, 'New profile'), (self.window.selected(), 'Edit profile')):

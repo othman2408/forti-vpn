@@ -110,7 +110,7 @@ class UtilityWindow(Adw.ApplicationWindow):
         popover.set_child(menu_content)
         def menu_action(callback):
             def activate(*args):
-                popover.popdown()
+                popover.set_visible(False)
                 callback(*args)
             return activate
         self.new_button = icon_button('New', 'list-add-symbolic', menu_action(self.new_profile))
@@ -121,11 +121,6 @@ class UtilityWindow(Adw.ApplicationWindow):
             widget.add_css_class('flat')
             widget.get_child().set_halign(Gtk.Align.START)
             menu_content.append(widget)
-        self.profile_lock_note = label('', 'dim-label')
-        self.profile_lock_note.set_max_width_chars(26)
-        margins(self.profile_lock_note, 6)
-        menu_content.append(self.profile_lock_note)
-
         self.connection_summary = Adw.PreferencesGroup(title='Active connection')
         self.connected_profile = Adw.ActionRow(title='Profile', subtitle_selectable=True)
         self.connected_server = Adw.ActionRow(title='Server', subtitle_selectable=True)
@@ -170,6 +165,9 @@ class UtilityWindow(Adw.ApplicationWindow):
         self.animations_handler = Gtk.Settings.get_default().connect('notify::gtk-enable-animations',
             self.animation_preference_changed)
         self.timer = GLib.timeout_add_seconds(3, self.tick)
+        self.prepared_editor = ProfileEditor(self, None)
+        self.prepared_editor.get_child().measure(Gtk.Orientation.VERTICAL, 420)
+        self.editor_prepare_source = None
         self.workflow.refresh()
 
     def tick(self):
@@ -239,10 +237,9 @@ class UtilityWindow(Adw.ApplicationWindow):
         self.delete_button.set_sensitive(idle and profile is not None and not locked)
         lock_reason = ('This profile is managed by your organization.' if profile and profile.managed
                        else 'Disconnect this profile before editing or deleting it.' if locked else '')
-        self.profile_lock_note.set_text(lock_reason)
-        self.profile_lock_note.set_visible(bool(lock_reason))
         for widget, name in ((self.edit_button, 'Edit'), (self.delete_button, 'Delete')):
             widget.set_tooltip_text(lock_reason or name + ' profile')
+            widget.update_property([Gtk.AccessibleProperty.DESCRIPTION], [lock_reason or name + ' profile'])
         self.manage_button.set_sensitive(idle)
         show_summary = connected and status not in ('connecting', 'awaiting authentication')
         self.connection_summary.set_visible(show_summary)
@@ -264,7 +261,9 @@ class UtilityWindow(Adw.ApplicationWindow):
         self.primary.set_label('Disconnect' if active or status == 'disconnecting' else 'Connect')
         if active or status == 'disconnecting':
             self.primary.remove_css_class('suggested-action')
+            self.primary.add_css_class('destructive-action')
         else:
+            self.primary.remove_css_class('destructive-action')
             self.primary.add_css_class('suggested-action')
         self.primary.set_sensitive(idle and (active or (profile is not None and state.status.state == 'disconnected')))
         cancellable = state.busy in ('connecting', 'awaiting authentication')
@@ -420,9 +419,23 @@ class UtilityWindow(Adw.ApplicationWindow):
         if self.selected():
             self.profile_editor(self.selected())
 
+    def prepare_editor(self):
+        self.editor_prepare_source = None
+        if not self.workflow.closed and self.prepared_editor is None:
+            self.prepared_editor = ProfileEditor(self, None)
+            self.prepared_editor.get_child().measure(Gtk.Orientation.VERTICAL, 420)
+        return GLib.SOURCE_REMOVE
+
+    def schedule_editor_preparation(self):
+        if self.editor_prepare_source is None and not self.workflow.closed:
+            # Wait for the native closing animation to finish before building the next form.
+            self.editor_prepare_source = GLib.timeout_add(500, self.prepare_editor)
+
     def profile_editor(self, existing):
         if self.profile_dialog is None:
-            self.profile_dialog = ProfileEditor(self, existing)
+            self.profile_dialog = self.prepared_editor or ProfileEditor(self, None)
+            self.prepared_editor = None
+            self.profile_dialog.configure(existing)
         self.profile_dialog.present(self)
 
     def delete_profile(self, *_):
@@ -515,6 +528,9 @@ class UtilityWindow(Adw.ApplicationWindow):
 
     def shutdown(self):
         self.workflow.close()
+        if self.editor_prepare_source is not None:
+            GLib.source_remove(self.editor_prepare_source)
+        self.prepared_editor = None
         GLib.source_remove(self.timer)
         Adw.StyleManager.get_default().disconnect(self.style_handler)
         Gtk.Settings.get_default().disconnect(self.animations_handler)

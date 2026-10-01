@@ -134,9 +134,27 @@ class ProfileEditor(ContentDialog):
         self.connect('close-attempt', self.cancel_or_close)
         self.connect('closed', self.closed)
 
+    def configure(self, existing):
+        """Populate the prepared form from the current FortiClient profile snapshot."""
+        self.existing = existing
+        self.set_title('Edit profile' if existing else 'New profile')
+        self.name.set_sensitive(existing is None)
+        self.name.set_text(existing.name if existing else '')
+        self.gateway.set_text(existing.gateway if existing else '')
+        self.username.set_text(existing.username if existing else '')
+        self.auth.get_model().splice(0, 1, ['Keep existing setting' if existing else 'Prompt for credentials'])
+        self.cert.get_model().splice(0, 1, ['Keep existing setting' if existing else 'None'])
+        self.auth.set_selected(0)
+        self.cert.set_selected(0)
+        self.username.set_sensitive(False)
+        self.path.set_text('')
+        self.path.set_sensitive(False)
+        self.set_focus(self.gateway if existing else self.name)
+
     def closed(self, *_):
         if self.parent.profile_dialog is self:
             self.parent.profile_dialog = None
+            self.parent.schedule_editor_preparation()
             if not self.parent.workflow.closed:
                 self.parent.render(self.parent.workflow.state)
 
