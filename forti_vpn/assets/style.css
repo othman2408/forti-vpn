@@ -5,7 +5,7 @@
 .connection-glow {
   background-image:
     radial-gradient(ellipse 38% 48% at 40% 48%, alpha(@success_color, 0.18), transparent 100%),
-    radial-gradient(ellipse 32% 44% at 64% 50%, alpha(#3584e4, 0.13), transparent 100%);
+    radial-gradient(ellipse 32% 44% at 64% 50%, alpha(@success_color, 0.09), transparent 100%);
 }
 .status-badge {
   border-radius: 999px;

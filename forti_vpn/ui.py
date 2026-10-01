@@ -81,6 +81,8 @@ class UtilityWindow(Adw.ApplicationWindow):
         heading.set_margin_top(8)
         heading.set_margin_bottom(8)
         self.hero_icon = Gtk.Image.new_from_file(str(Path(__file__).parent / 'assets' / (APP_ID + '.svg')))
+        self.hero_connected = False
+        self.hero_icon.update_property([Gtk.AccessibleProperty.LABEL], ['Forti VPN'])
         self.hero_icon.set_pixel_size(80)
         heading.append(self.hero_icon)
         title = label('Forti VPN', 'title-2')
@@ -134,6 +136,9 @@ class UtilityWindow(Adw.ApplicationWindow):
         self.connection_summary = Adw.PreferencesGroup(title='Active connection')
         self.connected_profile = Adw.ActionRow(title='Profile', subtitle_selectable=True)
         self.connected_server = Adw.ActionRow(title='Server', subtitle_selectable=True)
+        for row, icon in ((self.connected_profile, 'network-vpn-symbolic'),
+                          (self.connected_server, 'network-server-symbolic')):
+            row.add_prefix(Gtk.Image(icon_name=icon, css_classes=['dim-label']))
         self.connection_summary.add(self.connected_profile)
         self.connection_summary.add(self.connected_server)
         content.append(self.connection_summary)
@@ -220,6 +225,12 @@ class UtilityWindow(Adw.ApplicationWindow):
         working = state.busy not in (None, 'refreshing')
         auth = state.busy == 'awaiting authentication'
         connected = state.status.state == 'connected'
+        if connected != self.hero_connected:
+            self.hero_connected = connected
+            asset = APP_ID + ('-connected.svg' if connected else '.svg')
+            self.hero_icon.set_from_file(str(Path(__file__).parent / 'assets' / asset))
+            self.hero_icon.update_property([Gtk.AccessibleProperty.LABEL],
+                                           ['Forti VPN connected' if connected else 'Forti VPN'])
         active = state.status.state in ('connected', 'connecting', 'awaiting authentication')
         status = state.busy if working else state.status.state
         previous_status = self.status_label.get_text()
