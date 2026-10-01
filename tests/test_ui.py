@@ -244,6 +244,27 @@ class UITests(unittest.TestCase):
         state.profiles.pop()
         self.window.render(state)
 
+    def test_rejected_connection_with_pending_cli_status_offers_check_and_cancel(self):
+        from forti_vpn.backend import VPNError
+        workflow = self.window.workflow
+        workflow.cli.current = Status('connecting', 'Office VPN')
+        with patch.object(workflow.cli, 'connect', create=True,
+                          side_effect=VPNError('FortiClient rejected the operation.')):
+            workflow.connect(Profile('Office VPN'), '', False)
+            pump(.3)
+        self.assertEqual(workflow.state.status.state, 'connecting')
+        self.assertEqual(self.window.status_label.get_text(), 'Connection not confirmed')
+        self.assertEqual(self.window.primary.get_label(), 'Check Status')
+        self.assertFalse(self.window.primary.has_css_class('destructive-action'))
+        self.assertEqual(self.window.cancel_button.get_label(), 'Cancel Attempt')
+        self.assertTrue(self.window.cancel_button.get_visible())
+        with patch.object(workflow, 'refresh') as refresh, patch.object(workflow, 'disconnect') as disconnect:
+            self.window.primary.emit('clicked')
+            refresh.assert_called_once()
+            disconnect.assert_not_called()
+            self.window.cancel_button.emit('clicked')
+            disconnect.assert_called_once()
+
     def test_profile_menu_lock_explanation_and_keyboard_focus(self):
         state = self.window.workflow.state
         state.status = Status('connected', 'Office VPN')

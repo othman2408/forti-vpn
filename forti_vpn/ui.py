@@ -231,7 +231,9 @@ class UtilityWindow(Adw.ApplicationWindow):
             self.hero_icon.set_from_file(str(Path(__file__).parent / 'assets' / asset))
             self.hero_icon.update_property([Gtk.AccessibleProperty.LABEL],
                                            ['Forti VPN connected' if connected else 'Forti VPN'])
-        active = state.status.state in ('connected', 'connecting', 'awaiting authentication')
+        pending = state.status.state in ('connecting', 'awaiting authentication')
+        unconfirmed = pending and not working
+        failed_attempt = unconfirmed and state.error_origin == 'connecting' and bool(state.error)
         status = state.busy if working else state.status.state
         previous_status = self.status_label.get_text()
         titles = {'unavailable': 'FortiClient unavailable', 'disconnected': 'Disconnected',
@@ -239,6 +241,8 @@ class UtilityWindow(Adw.ApplicationWindow):
                   'connected': 'Connected', 'disconnecting': 'Disconnecting…',
                   'saving profile': 'Saving profile…', 'removing profile': 'Removing profile…'}
         self.status_label.set_text(titles.get(status, status.capitalize()))
+        if failed_attempt:
+            self.status_label.set_text('Connection not confirmed')
         if connected and state.status.profile and not working:
             self.status_label.set_text('Connected · ' + state.status.profile)
         if self.status_label.get_text() != previous_status:
@@ -282,17 +286,30 @@ class UtilityWindow(Adw.ApplicationWindow):
         }
         self.operation_note.set_text(instructions.get(status, ''))
         self.operation_note.set_visible(status in instructions and not state.setup_required)
-        self.primary.set_label('Disconnect' if active or status == 'disconnecting' else 'Connect')
-        if active or status == 'disconnecting':
+        if connected:
+            primary_label = 'Disconnect'
+        elif status == 'disconnecting':
+            primary_label = 'Cancelling…'
+        elif unconfirmed:
+            primary_label = 'Check Status'
+        else:
+            primary_label = 'Connect'
+        self.primary.set_label(primary_label)
+        if connected:
             self.primary.remove_css_class('suggested-action')
             self.primary.add_css_class('destructive-action')
         else:
             self.primary.remove_css_class('destructive-action')
             self.primary.add_css_class('suggested-action')
-        self.primary.set_sensitive(idle and (active or (profile is not None and state.status.state == 'disconnected')))
+        self.primary.set_sensitive(idle and (connected or unconfirmed or
+                                             (profile is not None and state.status.state == 'disconnected')))
         cancellable = state.busy in ('connecting', 'awaiting authentication')
-        self.cancel_button.set_visible(cancellable)
+        self.cancel_button.set_label('Cancel Attempt' if unconfirmed else 'Cancel')
+        self.cancel_button.set_sensitive(cancellable or (unconfirmed and idle))
+        self.cancel_button.set_visible(cancellable or unconfirmed)
         self.primary.set_visible(not cancellable and not state.setup_required)
+        if failed_attempt:
+            self.operation_note.set_text('Check the current status or cancel the unfinished attempt.')
         previous_error = self.error_label.get_text()
         self.error_label.set_text(state.error)
         if state.error and state.error != previous_error:
@@ -302,7 +319,7 @@ class UtilityWindow(Adw.ApplicationWindow):
         self.retry_button.set_visible(bool(state.error) and retry is not None and self.profile_dialog is None)
         self.retry_button.set_sensitive(idle)
         self.retry_button.set_label(retry or 'Try Again')
-        badge_style = ('connected' if status == 'connected' else 'unavailable' if status == 'unavailable'
+        badge_style = ('connected' if status == 'connected' else 'unavailable' if status == 'unavailable' or failed_attempt
                        else 'authentication' if status == 'awaiting authentication'
                        else 'idle' if status == 'disconnected' else 'progress')
         for style in ('connected', 'unavailable', 'authentication', 'idle', 'progress'):
@@ -334,7 +351,7 @@ class UtilityWindow(Adw.ApplicationWindow):
             self.fade(self.connection_glow, float(glow_visible), 'glow_animation', 240)
         indicator = getattr(self.get_application(), 'indicator', None)
         if indicator:
-            indicator.update(self.status_label.get_text(), active and idle and not self.exit_requested)
+            indicator.update(self.status_label.get_text(), connected and idle and not self.exit_requested)
         self.note.set_visible(not state.setup_required)
         if self.setup_dialog:
             self.setup_dialog.update()
@@ -347,13 +364,22 @@ class UtilityWindow(Adw.ApplicationWindow):
             self.challenge_window = None
 
     def primary_action(self, *_):
-        if self.workflow.state.status.state in ('connected', 'connecting', 'awaiting authentication'):
+        state = self.workflow.state
+        if state.busy:
+            return
+        if state.status.state == 'connected':
             self.workflow.disconnect()
-        elif self.selected():
+        elif state.status.state == 'disconnected' and self.selected():
             self.workflow.connect(self.selected(), self.username.get_text(), self.remember.get_active())
+        else:
+            self.workflow.refresh()
 
     def cancel_connection(self):
-        self.workflow.cancel()
+        state = self.workflow.state
+        if not state.busy and state.status.state in ('connecting', 'awaiting authentication'):
+            self.workflow.disconnect()
+        else:
+            self.workflow.cancel()
         if self.challenge_window:
             self.challenge_window.close()
             self.challenge_window = None
