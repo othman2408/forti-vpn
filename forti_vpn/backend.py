@@ -139,6 +139,51 @@ AUTH_PROMPTS = (
 )
 
 
+# Only fixed descriptions are exposed. Never include raw CLI output: a service
+# response can contain a password, token, gateway, or account information.
+CLI_MESSAGES = (
+    (r'(?:Failed to save credential to key store|Unable to use system.s key store|Failed to set credentials to GNOME Keyring)',
+     'FortiClient could not access its password storage. Unlock your login keyring or turn off Remember password.'),
+    (r'(?:Internal communication failed|Failed to communicate with VPN service|Failed sending data to VPN service|Failed to connect with the websocket server)',
+     'FortiClient could not communicate with its VPN service. Open FortiClient and retry.'),
+    (r'Service rejected our request \(code:\s*\d+\)',
+     'The FortiClient service rejected the connection request.'),
+    (r'(?:Incorrect password|Invalid password|Authentication failed|Login failed|Access denied)',
+     'The VPN server rejected authentication. Check the username, password, and MFA requirements.'),
+    (r'(?:certificate verify failed|certificate verification failed|untrusted certificate)',
+     'FortiClient could not verify the VPN certificate. Ask your IT team to check it.'),
+    (r'VPN tunnel does not exist', 'FortiClient could not find the selected VPN profile. Refresh profiles.'),
+    (r'(?:SSLVPN|IPsec VPN) is disabled while registered to EMS',
+     'Your organization has disabled this VPN type in FortiClient. Contact your IT team.'),
+    (r'(?:Failed to convert ip address form or resolve FQDN|Could not resolve|Unable to resolve)',
+     'FortiClient could not resolve the VPN server address. Check your network and profile.'),
+    (r'(?:Request failed\.|Connection failed)',
+     'FortiClient reported a connection failure. Check the VPN server and service availability.'),
+)
+
+
+def cli_messages(output):
+    return [description for pattern, description in CLI_MESSAGES if re.search(pattern, output, re.I)]
+
+
+def cli_failure(output, code):
+    # Credential storage warnings do not establish a failed VPN connection.
+    # A successful CLI exit still requires status verification by connect().
+    warning_pattern = r'\s*(?:Failed to save credential to key store\.|Failed to set credentials to GNOME Keyring\.)\s*'
+    fatal_output = '\n'.join(line for line in output.splitlines()
+                             if not re.fullmatch(warning_pattern, line, re.I))
+    failed = bool(code or re.search(r'\b(?:error|failed|failure|invalid|denied|unable|incorrect|unrecognized)\b',
+                                   fatal_output, re.I))
+    if not failed:
+        return None
+    descriptions = cli_messages(fatal_output)
+    if descriptions:
+        return descriptions[0]
+    if code and cli_messages(output):
+        return cli_messages(output)[0]
+    return 'FortiClient did not complete the request. Open Settings → Diagnostics for the CLI result.'
+
+
 class CLI:
     def __init__(self, executable='forticlient', read_timeout=10, interactive_timeout=120):
         self.executable = executable
@@ -268,6 +313,7 @@ class CLI:
             pending = ''
             deadline = deadline or time.monotonic() + self.interactive_timeout
             last_data = time.monotonic()
+            reported = set()
             log('Started FortiClient ' + args[0] + '.')
             while True:
                 if cancel.is_set():
@@ -287,6 +333,10 @@ class CLI:
                     pending += chunk.decode('utf-8', errors='replace').replace('\r', '')
                     pending = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', pending)[-16384:]
                     last_data = time.monotonic()
+                for description in cli_messages(pending):
+                    if description not in reported:
+                        reported.add(description)
+                        log(description)
                 matched = False
                 for kind, pattern in compiled:
                     match = pattern.search(pending)
@@ -311,8 +361,10 @@ class CLI:
                 if process.poll() is not None and not select.select([master], [], [], 0)[0]:
                     break
             code = process.wait(timeout=2)
-            if code or re.search(r'\b(?:error|failed|failure|invalid|denied|unable|incorrect|unrecognized)\b', pending, re.I):
-                raise VPNError('FortiClient rejected the operation. Check credentials, profile settings, and service availability.')
+            log('FortiClient CLI exited with code ' + str(code) + '.')
+            failure = cli_failure(pending, code)
+            if failure:
+                raise VPNError(failure)
             log('FortiClient finished ' + args[0] + '; verifying the result.')
         finally:
             if process and process.poll() is None:

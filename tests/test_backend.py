@@ -108,6 +108,27 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(self.connect().state, 'connected')
         self.assertEqual(self.prompts.count('mfa'), 2)
 
+    def test_keyring_warning_still_verifies_actual_connection(self):
+        self.write_state('keyring_warning')
+        self.assertEqual(self.connect().state, 'connected')
+        self.assertTrue(any('password storage' in line for line in self.logs))
+        self.write_state('keyring_false_success')
+        # A warning by itself never substitutes for the status check.
+        with self.assertRaisesRegex(VPNError, 'did not confirm'):
+            self.connect()
+        self.assertEqual(self.cli.status().state, 'disconnected')
+
+    def test_failure_messages_do_not_expose_raw_cli_credentials(self):
+        from forti_vpn.backend import cli_failure, cli_messages
+        output = 'ERROR: Internal communication failed SUPERSECRET 123SECRET'
+        message = cli_failure(output, 1)
+        self.assertIn('VPN service', message)
+        self.assertNotIn('SUPERSECRET', message)
+        self.assertNotIn('123SECRET', '\n'.join(cli_messages(output)))
+        self.assertIn('authentication', cli_failure('Incorrect password', 1))
+        self.assertIsNone(cli_failure('Failed to save credential to key store.\nDONE.', 0))
+        self.assertIn('password storage', cli_failure('Failed to save credential to key store.', 1))
+
     def test_rejected_password(self):
         self.write_state('rejected')
         with self.assertRaises(VPNError):

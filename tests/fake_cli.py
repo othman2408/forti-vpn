@@ -61,10 +61,12 @@ elif command == 'connect':
     if mode == 'retry':
         print('Invalid code; try again')
         code = prompt('Enter verification code: ')
-    if mode != 'false_success':
+    if mode not in ('false_success', 'keyring_false_success'):
         state['status'] = 'Connected'
         state['active'] = args[2]
         write()
+    if mode in ('keyring_warning', 'keyring_false_success'):
+        print('Failed to save credential to key store.')
     print('DONE.')
 elif command == 'disconnect':
     if mode != 'false_disconnect':
