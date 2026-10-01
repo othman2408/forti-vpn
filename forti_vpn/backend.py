@@ -7,12 +7,14 @@ import os
 import pty
 import re
 import select
+import stat
 import shutil
 import signal
 import subprocess
 import termios
 import threading
 import time
+from pathlib import Path
 
 
 class VPNError(Exception):
@@ -142,6 +144,8 @@ AUTH_PROMPTS = (
 # Only fixed descriptions are exposed. Never include raw CLI output: a service
 # response can contain a password, token, gateway, or account information.
 CLI_MESSAGES = (
+    (r'(?:Load VPN profile was failed|Failed to load (?:the )?VPN profile)',
+     'FortiClient could not load this VPN profile. Check FortiClient’s logs for the profile error.'),
     (r'(?:Failed to save credential to key store|Unable to use system.s key store|Failed to set credentials to GNOME Keyring)',
      'FortiClient could not access its password storage. Unlock your login keyring or turn off Remember password.'),
     (r'(?:Internal communication failed|Failed to communicate with VPN service|Failed sending data to VPN service|Failed to connect with the websocket server)',
@@ -184,11 +188,58 @@ def cli_failure(output, code):
     return 'FortiClient did not complete the request. Open Settings → Diagnostics for the CLI result.'
 
 
+VPN_LOG_MESSAGES = (
+    (r'Too many bad login attempts',
+     'The VPN server temporarily blocked login after too many failed attempts. Wait a few minutes or ask IT to clear the block.'),
+    (r'DBUS session bus address not found',
+     'FortiClient could not find your desktop session bus. Launch it from your desktop session and retry.'),
+)
+
+
 class CLI:
-    def __init__(self, executable='forticlient', read_timeout=10, interactive_timeout=120):
+    def __init__(self, executable='forticlient', read_timeout=10, interactive_timeout=120,
+                 vpn_log='/var/log/forticlient/sslvpn.log'):
         self.executable = executable
         self.read_timeout = read_timeout
         self.interactive_timeout = interactive_timeout
+        self.vpn_log = Path(vpn_log)
+
+    @staticmethod
+    def environment():
+        env = {**os.environ, 'LC_ALL': 'C'}
+        if not env.get('DBUS_SESSION_BUS_ADDRESS'):
+            # Reuse the user's existing desktop bus; never start a separate bus.
+            bus = Path('/run/user') / str(os.getuid()) / 'bus'
+            try:
+                info = bus.stat()
+                if info.st_uid == os.getuid() and stat.S_ISSOCK(info.st_mode):
+                    env['DBUS_SESSION_BUS_ADDRESS'] = 'unix:path=' + str(bus)
+            except OSError:
+                pass
+        return env
+
+    def log_checkpoint(self):
+        try:
+            info = self.vpn_log.stat()
+            return info.st_ino, info.st_size, time.time()
+        except OSError:
+            return None, 0, time.time()
+
+    def recent_log_messages(self, checkpoint):
+        inode, offset, started = checkpoint
+        try:
+            with self.vpn_log.open('rb') as stream:
+                info = os.fstat(stream.fileno())
+                if not stat.S_ISREG(info.st_mode) or info.st_mtime < started:
+                    return []
+                if info.st_ino != inode or info.st_size < offset:
+                    offset = 0
+                stream.seek(max(offset, info.st_size - 65536))
+                output = stream.read(65536).decode('utf-8', errors='replace')
+            return [description for pattern, description in VPN_LOG_MESSAGES
+                    if re.search(pattern, output, re.I)]
+        except OSError:
+            return []
 
     def resolve_executable(self):
         executable = shutil.which(self.executable)
@@ -204,7 +255,7 @@ class CLI:
     def read(self, *args):
         try:
             result = subprocess.run([self.resolve_executable(), 'vpn', *args], capture_output=True,
-                                    text=True, timeout=self.read_timeout, env={**os.environ, 'LC_ALL': 'C'})
+                                    text=True, timeout=self.read_timeout, env=self.environment())
         except FileNotFoundError as exc:
             raise CLINotFound('FortiClient CLI was not found. Open Setup Help to install FortiClient, then check again.') from exc
         except subprocess.TimeoutExpired as exc:
@@ -295,6 +346,7 @@ class CLI:
         return self.wait_status('connected', cancel, deadline)
 
     def interactive(self, args, prompts, answer, cancel, log, deadline=None):
+        checkpoint = self.log_checkpoint() if args[0] == 'connect' else None
         master, slave = pty.openpty()
         attr = termios.tcgetattr(slave)
         attr[3] &= ~(termios.ECHO | termios.ECHONL)
@@ -304,7 +356,7 @@ class CLI:
             try:
                 process = subprocess.Popen([self.resolve_executable(), 'vpn', *args], stdin=slave,
                                            stdout=slave, stderr=slave, start_new_session=True,
-                                           env={**os.environ, 'LC_ALL': 'C'})
+                                           env=self.environment())
             except FileNotFoundError as exc:
                 raise CLINotFound('FortiClient CLI was not found. Open Setup Help to install FortiClient, then check again.') from exc
             os.close(slave)
@@ -364,7 +416,10 @@ class CLI:
             log('FortiClient CLI exited with code ' + str(code) + '.')
             failure = cli_failure(pending, code)
             if failure:
-                raise VPNError(failure)
+                details = self.recent_log_messages(checkpoint) if checkpoint else []
+                for description in details:
+                    log(description)
+                raise VPNError(details[0] if details else failure)
             log('FortiClient finished ' + args[0] + '; verifying the result.')
         finally:
             if process and process.poll() is None:

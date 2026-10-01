@@ -54,6 +54,15 @@ elif command == 'connect':
         prompt('Accept untrusted certificate? [y/n] ')
         sys.exit(1)
     secret = prompt('Please input password.\n')
+    if mode == 'login_blocked':
+        Path(os.environ['FAKE_VPN_LOG']).write_text('Login failed: Too many bad login attempts.\npassword SUPERSECRET token 123SECRET\n')
+        print('Authentication failed')
+        sys.exit(0)
+    if mode == 'profile_load_failure':
+        print('Status: Disconnected')
+        print('Notification: Load VPN profile was failed. Check log file for details.')
+        print('DONE.')
+        sys.exit(0)
     if mode == 'rejected':
         print('Incorrect password')
         sys.exit(1)

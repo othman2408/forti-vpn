@@ -69,10 +69,11 @@ class IntegrationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.path = Path(self.temp.name) / 'state.json'
-        self.env = patch.dict(os.environ, {'FAKE_STATE': str(self.path)})
+        self.vpn_log = Path(self.temp.name) / 'sslvpn.log'
+        self.env = patch.dict(os.environ, {'FAKE_STATE': str(self.path), 'FAKE_VPN_LOG': str(self.vpn_log)})
         self.env.start()
         self.write_state()
-        self.cli = CLI(FAKE, interactive_timeout=3)
+        self.cli = CLI(FAKE, interactive_timeout=3, vpn_log=self.vpn_log)
         self.logs = []
         self.prompts = []
         self.cancel = threading.Event()
@@ -128,6 +129,44 @@ class IntegrationTests(unittest.TestCase):
         self.assertIn('authentication', cli_failure('Incorrect password', 1))
         self.assertIsNone(cli_failure('Failed to save credential to key store.\nDONE.', 0))
         self.assertIn('password storage', cli_failure('Failed to save credential to key store.', 1))
+
+    def test_profile_load_failure_with_zero_exit_is_not_authentication_failure(self):
+        self.write_state('profile_load_failure')
+        with self.assertRaisesRegex(VPNError, 'could not load this VPN profile'):
+            self.connect()
+        self.assertEqual(self.cli.status().state, 'disconnected')
+        self.assertFalse(any('rejected authentication' in line for line in self.logs))
+        self.assertTrue(any('could not load this VPN profile' in line for line in self.logs))
+
+    def test_server_login_block_reported_from_fresh_log_without_credentials(self):
+        self.write_state('login_blocked')
+        with self.assertRaisesRegex(VPNError, 'temporarily blocked login'):
+            self.connect()
+        diagnostic = '\n'.join(self.logs)
+        self.assertIn('temporarily blocked login', diagnostic)
+        self.assertNotIn('SUPERSECRET', diagnostic)
+        self.assertNotIn('123SECRET', diagnostic)
+
+    def test_old_login_block_log_does_not_override_new_failure(self):
+        self.vpn_log.write_text('Too many bad login attempts\n')
+        self.write_state('rejected')
+        with self.assertRaisesRegex(VPNError, 'rejected authentication'):
+            self.connect()
+        self.assertFalse(any('temporarily blocked' in line for line in self.logs))
+
+    def test_session_bus_fallback_uses_only_existing_user_socket(self):
+        import stat
+        from types import SimpleNamespace
+        with patch.dict(os.environ, {'DBUS_SESSION_BUS_ADDRESS': ''}):
+            info = SimpleNamespace(st_uid=os.getuid(), st_mode=stat.S_IFSOCK)
+            with patch('forti_vpn.backend.Path.stat', return_value=info):
+                self.assertEqual(CLI.environment()['DBUS_SESSION_BUS_ADDRESS'],
+                                 'unix:path=/run/user/' + str(os.getuid()) + '/bus')
+            info.st_mode = stat.S_IFREG
+            with patch('forti_vpn.backend.Path.stat', return_value=info):
+                self.assertFalse(CLI.environment().get('DBUS_SESSION_BUS_ADDRESS'))
+        with patch.dict(os.environ, {'DBUS_SESSION_BUS_ADDRESS': 'unix:abstract=existing'}):
+            self.assertEqual(CLI.environment()['DBUS_SESSION_BUS_ADDRESS'], 'unix:abstract=existing')
 
     def test_rejected_password(self):
         self.write_state('rejected')
