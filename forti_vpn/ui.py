@@ -13,6 +13,7 @@ from .indicator import Indicator
 from .settings import SettingsDialog
 from .dialogs import ContentDialog, AuthenticationDialog, ProfileEditor
 from .widgets import label, button, icon_button, margins
+from .setup import SetupDialog
 
 APP_ID = 'io.github.fortivpn.Utility'
 
@@ -29,8 +30,10 @@ class UtilityWindow(Adw.ApplicationWindow):
         super().__init__(application=app, title='Forti VPN', default_width=480, default_height=740)
         self.preferences = Preferences()
         self.settings_window = None
+        self.setup_dialog = None
         self.indicator_available = False
         self.exit_requested = False
+        self.cli_seen = False
         self.exit_checked = False
         self.exiting = False
         self.apply_preferences()
@@ -48,6 +51,7 @@ class UtilityWindow(Adw.ApplicationWindow):
         root.append(toolbar)
         menu = Gio.Menu()
         menu.append('Settings', 'app.settings')
+        menu.append('Set Up FortiClient', 'app.setup')
         menu.append('Disconnect and Quit', 'app.quit')
         menu_button = Gtk.MenuButton(icon_name='open-menu-symbolic', menu_model=menu, tooltip_text='Application menu')
         menu_button.update_property([Gtk.AccessibleProperty.LABEL], ['Application menu'])
@@ -95,7 +99,13 @@ class UtilityWindow(Adw.ApplicationWindow):
         heading.append(self.status_badge)
         content.append(heading)
 
+        self.setup_group = Adw.PreferencesGroup(title='Get started',
+            description='Install FortiClient to use VPN connections and profiles.')
+        self.setup_group.add(button('Set Up FortiClient', lambda *_: self.show_setup(), 'suggested-action'))
+        self.setup_group.set_visible(False)
+        content.append(self.setup_group)
         profiles = Adw.PreferencesGroup(title='VPN profile')
+        self.profiles_group = profiles
         self.profile_row = Adw.ComboRow(title='Profile', model=Gtk.StringList.new([]))
         self.profile_row.connect('notify::selected', self.select_profile)
         profiles.add(self.profile_row)
@@ -153,6 +163,10 @@ class UtilityWindow(Adw.ApplicationWindow):
         self.retry_button.set_halign(Gtk.Align.START)
         self.retry_button.set_visible(False)
         content.append(self.retry_button)
+        self.setup_help = button('Setup Help', lambda *_: self.show_setup())
+        self.setup_help.set_halign(Gtk.Align.START)
+        self.setup_help.set_visible(False)
+        content.append(self.setup_help)
         self.note = label('Closing this window keeps an established VPN connection running.', 'dim-label')
         content.append(self.note)
         self.toast_overlay = Adw.ToastOverlay()
@@ -204,6 +218,11 @@ class UtilityWindow(Adw.ApplicationWindow):
             self.rendering = False
             profile = self.selected()
             self.username.set_text(profile.username if profile else '')
+        if state.status.state != 'unavailable':
+            self.cli_seen = True
+        self.setup_group.set_visible(state.setup_required)
+        self.profiles_group.set_visible(not state.setup_required)
+        self.setup_help.set_visible(state.status.state == 'unavailable' and not state.setup_required)
         working = state.busy not in (None, 'refreshing')
         auth = state.busy == 'awaiting authentication'
         connected = state.status.state == 'connected'
@@ -257,7 +276,7 @@ class UtilityWindow(Adw.ApplicationWindow):
             'unavailable': 'Check that FortiClient is installed and running, then refresh.',
         }
         self.operation_note.set_text(instructions.get(status, ''))
-        self.operation_note.set_visible(status in instructions)
+        self.operation_note.set_visible(status in instructions and not state.setup_required)
         self.primary.set_label('Disconnect' if active or status == 'disconnecting' else 'Connect')
         if active or status == 'disconnecting':
             self.primary.remove_css_class('suggested-action')
@@ -268,12 +287,12 @@ class UtilityWindow(Adw.ApplicationWindow):
         self.primary.set_sensitive(idle and (active or (profile is not None and state.status.state == 'disconnected')))
         cancellable = state.busy in ('connecting', 'awaiting authentication')
         self.cancel_button.set_visible(cancellable)
-        self.primary.set_visible(not cancellable)
+        self.primary.set_visible(not cancellable and not state.setup_required)
         previous_error = self.error_label.get_text()
         self.error_label.set_text(state.error)
         if state.error and state.error != previous_error:
             self.error_label.announce(state.error, Gtk.AccessibleAnnouncementPriority.HIGH)
-        self.error_label.set_visible(bool(state.error))
+        self.error_label.set_visible(bool(state.error) and not state.setup_required)
         retry = self.retry_choice(state)
         self.retry_button.set_visible(bool(state.error) and retry is not None and self.profile_dialog is None)
         self.retry_button.set_sensitive(idle)
@@ -311,6 +330,9 @@ class UtilityWindow(Adw.ApplicationWindow):
         indicator = getattr(self.get_application(), 'indicator', None)
         if indicator:
             indicator.update(self.status_label.get_text(), active and idle and not self.exit_requested)
+        self.note.set_visible(not state.setup_required)
+        if self.setup_dialog:
+            self.setup_dialog.update()
         if self.settings_window:
             self.settings_window.update()
         if self.exit_requested and not state.busy:
@@ -362,6 +384,8 @@ class UtilityWindow(Adw.ApplicationWindow):
             self.show_toast('Profile saved' if operation == 'saving profile' else 'Profile deleted')
 
     def retry_choice(self, state):
+        if state.setup_required:
+            return 'Check Again'
         if state.error_origin == 'connecting' and state.status.state == 'disconnected' and self.selected():
             return 'Try Again'
         if state.error_origin == 'disconnecting' and state.status.state == 'connected':
@@ -381,7 +405,7 @@ class UtilityWindow(Adw.ApplicationWindow):
             self.primary_action()
         elif choice == 'Retry Disconnect':
             self.workflow.disconnect()
-        elif choice == 'Refresh':
+        elif choice in ('Refresh', 'Check Again'):
             self.workflow.refresh()
         elif choice == 'Manage Profiles':
             self.manage_button.popup()
@@ -462,6 +486,12 @@ class UtilityWindow(Adw.ApplicationWindow):
             self.note.set_text('Close to keep running in the top bar.' if self.preferences.data['close_behavior'] == 'hide'
                                else 'Closing this window disconnects the VPN and quits.')
 
+    def show_setup(self):
+        self.present()
+        if self.setup_dialog is None:
+            self.setup_dialog = SetupDialog(self)
+        self.setup_dialog.present(self)
+
     def show_settings(self):
         self.present()
         if self.settings_window is None:
@@ -499,6 +529,11 @@ class UtilityWindow(Adw.ApplicationWindow):
         return True
 
     def request_exit(self):
+        if self.workflow.state.setup_required and not self.cli_seen:
+            # A fresh setup screen has never had a usable CLI or started a connection.
+            self.exiting = True
+            self.get_application().quit()
+            return
         if self.exit_requested:
             return
         self.exit_requested = True
@@ -557,7 +592,8 @@ class Application(Adw.Application):
         provider = Gtk.CssProvider()
         provider.load_from_path(str(Path(__file__).parent / 'assets' / 'style.css'))
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
-        for name, callback in [('settings', lambda: self.window.show_settings()), ('quit', lambda: self.window.request_exit())]:
+        for name, callback in [('settings', lambda: self.window.show_settings()), ('setup', lambda: self.window.show_setup()),
+                               ('quit', lambda: self.window.request_exit())]:
             action = Gio.SimpleAction.new(name, None)
             action.connect('activate', lambda action, param, callback=callback: callback())
             self.add_action(action)

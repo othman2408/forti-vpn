@@ -94,6 +94,8 @@ class UITests(unittest.TestCase):
         self.window.workflow.state.status = Status('disconnected')
         self.window.workflow.state.error = ''
         self.window.workflow.state.error_origin = ''
+        self.window.workflow.state.setup_required = False
+        self.window.cli_seen = True
         self.window.exit_requested = False
         self.window.exiting = False
         self.window.workflow.cli.current = Status('disconnected')
@@ -505,6 +507,70 @@ class UITests(unittest.TestCase):
         self.assertTrue(press_escape(self.window))
         pump(.3)
         self.assertIsNone(self.window.settings_window)
+
+    def test_missing_cli_setup_screen_and_check_again_recovery(self):
+        from forti_vpn.backend import CLINotFound
+        state = self.window.workflow.state
+        with patch.object(self.window.workflow.cli, 'status', side_effect=CLINotFound('CLI missing')):
+            self.window.workflow.refresh()
+            pump(.3)
+        self.assertTrue(state.setup_required)
+        self.assertTrue(self.window.setup_group.get_visible())
+        self.assertFalse(self.window.profiles_group.get_visible())
+        self.assertFalse(self.window.primary.get_visible())
+        self.window.show_setup()
+        dialog = self.window.setup_dialog
+        self.assertIn('not been found', dialog.check_status.get_text())
+        dialog.check.emit('clicked')
+        pump(.3)
+        self.assertFalse(state.setup_required)
+        self.assertTrue(self.window.primary.get_visible())
+        self.assertIn('ready', dialog.check_status.get_text())
+
+    def test_setup_command_copy_and_fresh_setup_can_quit(self):
+        self.window.show_setup()
+        dialog = self.window.setup_dialog
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'FortiClient installer.deb'
+            path.touch()
+            dialog.set_package(str(path))
+            with patch.object(dialog, 'get_clipboard') as clipboard:
+                dialog.copy_button.emit('clicked')
+                self.assertIn(str(path), clipboard.return_value.set.call_args.args[0])
+                self.assertEqual(dialog.copy_button.get_label(), 'Command Copied')
+        state = self.window.workflow.state
+        state.status = Status('unavailable')
+        state.setup_required = True
+        self.window.cli_seen = False
+        with patch.object(self.app, 'quit') as quit_app, patch.object(self.window.workflow, 'disconnect') as disconnect:
+            self.window.request_exit()
+            quit_app.assert_called_once()
+            disconnect.assert_not_called()
+
+    def test_setup_large_text_and_long_package_path_fit_narrow_window(self):
+        settings = Gtk.Settings.get_default()
+        font = settings.get_property('gtk-font-name')
+        try:
+            settings.set_property('gtk-font-name', 'Sans 16')
+            self.window.set_default_size(360, 650)
+            self.window.show_setup()
+            dialog = self.window.setup_dialog
+            with tempfile.TemporaryDirectory() as directory:
+                package = Path(directory) / ('forticlient_' + 'x' * 140 + '.deb')
+                package.touch()
+                dialog.set_package(str(package))
+                pump(.3)
+                self.assertLessEqual(dialog.get_width(), self.window.get_width())
+                self.assertLessEqual(dialog.get_child().measure(Gtk.Orientation.HORIZONTAL, -1)[0], self.window.get_width())
+                success, bounds = dialog.check.compute_bounds(self.window)
+                self.assertTrue(success)
+                self.assertLessEqual(bounds.get_y() + bounds.get_height(), self.window.get_height())
+                self.assertGreaterEqual(bounds.get_x(), 0)
+        finally:
+            self.window.setup_dialog.close()
+            pump(.3)
+            settings.set_property('gtk-font-name', font)
+            self.window.set_default_size(480, 740)
 
     def test_themes_narrow_window_large_text_render(self):
         manager = Adw.StyleManager.get_default()

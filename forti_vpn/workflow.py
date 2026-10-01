@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 import queue
 import threading
 import time
-from .backend import CLI, Status, VPNError
+from .backend import CLI, CLINotFound, Status, VPNError
 
 
 @dataclass
@@ -13,6 +13,7 @@ class State:
     busy: str | None = None
     error: str = ''
     error_origin: str = ''
+    setup_required: bool = False
     diagnostics: list[str] = field(default_factory=list)
 
 
@@ -106,15 +107,19 @@ class Workflow:
         self.notify()
         def run():
             error = ''
+            setup_required = False
             snapshot = None
             try:
                 result = work()
                 snapshot = result if refresh else self._snapshot()
             except (VPNError, OSError, ValueError) as exc:
                 error = str(exc)
+                setup_required = isinstance(exc, CLINotFound)
                 try:
                     snapshot = self._snapshot()
-                except (VPNError, OSError, ValueError):
+                    setup_required = False
+                except (VPNError, OSError, ValueError) as snapshot_error:
+                    setup_required = isinstance(snapshot_error, CLINotFound)
                     snapshot = (Status('unavailable'), self.state.profiles)
             except Exception:
                 error = 'An unexpected application error occurred. Restart the app and retry.'
@@ -129,6 +134,7 @@ class Workflow:
                 else:
                     self.state.busy = None
                 self.state.status, self.state.profiles = snapshot
+                self.state.setup_required = setup_required
                 if error:
                     self.state.error = error
                     self.state.error_origin = operation

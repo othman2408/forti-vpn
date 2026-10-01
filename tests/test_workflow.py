@@ -2,7 +2,8 @@ import queue
 import threading
 import time
 import unittest
-from forti_vpn.backend import Cancelled, Profile, Status, VPNError
+from unittest.mock import patch
+from forti_vpn.backend import CLINotFound, Cancelled, Profile, Status, VPNError
 from forti_vpn.workflow import Workflow
 
 
@@ -132,6 +133,18 @@ class WorkflowTests(unittest.TestCase):
         gate.set()
         self.pump(lambda: not self.workflow.refreshing)
         self.assertEqual(self.workflow.state.status.state, 'connected')
+
+    def test_missing_cli_setup_state_recovers_after_installation(self):
+        with patch.object(self.cli, 'status', side_effect=CLINotFound('CLI missing')):
+            self.refresh()
+            self.assertTrue(self.workflow.state.setup_required)
+            self.assertEqual(self.workflow.state.status.state, 'unavailable')
+        self.refresh()
+        self.assertFalse(self.workflow.state.setup_required)
+        self.assertEqual(self.workflow.state.status.state, 'disconnected')
+        self.cli.unavailable = True
+        self.refresh()
+        self.assertFalse(self.workflow.state.setup_required)
 
     def test_completion_feedback_is_once_and_only_after_reconciliation(self):
         events = []

@@ -7,6 +7,7 @@ import os
 import pty
 import re
 import select
+import shutil
 import signal
 import subprocess
 import termios
@@ -16,6 +17,10 @@ import time
 
 class VPNError(Exception):
     pass
+
+
+class CLINotFound(VPNError):
+    """The FortiClient executable is missing, rather than an operation failing."""
 
 
 class Cancelled(VPNError):
@@ -140,12 +145,23 @@ class CLI:
         self.read_timeout = read_timeout
         self.interactive_timeout = interactive_timeout
 
+    def resolve_executable(self):
+        executable = shutil.which(self.executable)
+        if executable:
+            return executable
+        # The official Linux package may be installed without a PATH symlink.
+        if self.executable == 'forticlient':
+            fallback = '/opt/forticlient/forticlient-cli'
+            if os.path.isfile(fallback) and os.access(fallback, os.X_OK):
+                return fallback
+        raise CLINotFound('FortiClient CLI was not found. Open Setup Help to install FortiClient, then check again.')
+
     def read(self, *args):
         try:
-            result = subprocess.run([self.executable, 'vpn', *args], capture_output=True,
+            result = subprocess.run([self.resolve_executable(), 'vpn', *args], capture_output=True,
                                     text=True, timeout=self.read_timeout, env={**os.environ, 'LC_ALL': 'C'})
         except FileNotFoundError as exc:
-            raise VPNError('FortiClient is not installed or is not on PATH.') from exc
+            raise CLINotFound('FortiClient CLI was not found. Open Setup Help to install FortiClient, then check again.') from exc
         except subprocess.TimeoutExpired as exc:
             raise VPNError('FortiClient did not respond within ten seconds.') from exc
         if result.returncode:
@@ -241,11 +257,11 @@ class CLI:
         process = None
         try:
             try:
-                process = subprocess.Popen([self.executable, 'vpn', *args], stdin=slave,
+                process = subprocess.Popen([self.resolve_executable(), 'vpn', *args], stdin=slave,
                                            stdout=slave, stderr=slave, start_new_session=True,
                                            env={**os.environ, 'LC_ALL': 'C'})
             except FileNotFoundError as exc:
-                raise VPNError('FortiClient is not installed or is not on PATH.') from exc
+                raise CLINotFound('FortiClient CLI was not found. Open Setup Help to install FortiClient, then check again.') from exc
             os.close(slave)
             slave = -1
             compiled = [(kind, re.compile(pattern, re.I)) for kind, pattern in prompts]

@@ -12,7 +12,7 @@ A lightweight Ubuntu GUI for FortiClient VPN, with simple connection control, pr
 
 ## Install
 
-Requires an existing FortiClient installation.
+Built for Ubuntu 26.04. FortiClient is required. If its CLI is missing, the app guides you through downloading, installing, and checking it.
 
 ```bash
 sudo apt install python3 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1
@@ -22,7 +22,7 @@ cd forti-vpn
 ./scripts/install.sh
 ```
 
-Open **Forti VPN** from your applications menu. Run the installer again after updating the source.
+Open **Forti VPN** from your applications menu. Use **Set Up FortiClient** if needed; installation commands are copied for you to run in Terminal. Run the installer again after updating the source.
 
 ## Use
 

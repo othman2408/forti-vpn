@@ -7,7 +7,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-from forti_vpn.backend import AUTH_PROMPTS, CLI, Cancelled, Profile, ProfileSettings, VPNError, parse_profile, parse_profiles, parse_status
+from forti_vpn.backend import AUTH_PROMPTS, CLI, CLINotFound, Cancelled, Profile, ProfileSettings, VPNError, parse_profile, parse_profiles, parse_status
 from forti_vpn.preferences import Preferences
 
 FAKE = str(Path(__file__).with_name('fake_cli.py'))
@@ -186,10 +186,20 @@ class IntegrationTests(unittest.TestCase):
         with self.assertRaises(VPNError):
             self.cli.disconnect()
 
+    def test_cli_discovery_falls_back_to_official_location_and_recovers(self):
+        cli = CLI()
+        with patch('forti_vpn.backend.shutil.which', return_value=None), patch('forti_vpn.backend.os.path.isfile', return_value=True), patch('forti_vpn.backend.os.access', return_value=True):
+            self.assertEqual(cli.resolve_executable(), '/opt/forticlient/forticlient-cli')
+        with patch('forti_vpn.backend.shutil.which', return_value=None), patch('forti_vpn.backend.os.path.isfile', return_value=False):
+            with self.assertRaises(CLINotFound):
+                cli.resolve_executable()
+        with patch('forti_vpn.backend.shutil.which', return_value='/usr/bin/forticlient'):
+            self.assertEqual(cli.resolve_executable(), '/usr/bin/forticlient')
+
     def test_unavailable(self):
-        with self.assertRaisesRegex(VPNError, 'not installed'):
+        with self.assertRaisesRegex(CLINotFound, 'CLI was not found'):
             CLI('/does/not/exist').status()
-        with self.assertRaisesRegex(VPNError, 'not installed'):
+        with self.assertRaisesRegex(CLINotFound, 'CLI was not found'):
             CLI('/does/not/exist').interactive(['connect', 'test'], [], lambda _: '', self.cancel, self.logs.append)
 
     def test_read_timeout(self):
