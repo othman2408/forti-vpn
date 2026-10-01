@@ -28,7 +28,7 @@ def dispatch(callback):
 class UtilityWindow(Adw.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app, title='Forti VPN', default_width=480, default_height=740)
-        self.set_size_request(360, 520)
+        self.set_size_request(480, 740)
         self.preferences = Preferences()
         self.settings_window = None
         self.setup_dialog = None
