@@ -117,8 +117,7 @@ class UtilityWindow(Adw.ApplicationWindow):
         self.manage_button.update_property([Gtk.AccessibleProperty.LABEL], ['Manage Profile'])
         profiles.set_header_suffix(self.manage_button)
         popover = Gtk.Popover()
-        menu_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        margins(menu_content, 8)
+        menu_content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         self.manage_button.set_popover(popover)
         popover.set_child(menu_content)
         def menu_action(callback):
