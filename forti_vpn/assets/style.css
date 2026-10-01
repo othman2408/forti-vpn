@@ -1,0 +1,38 @@
+/* Theme-derived colors retain contrast in light, dark, and high-contrast modes. */
+.connection-header {
+  padding: 24px;
+}
+.connection-glow {
+  background-image:
+    radial-gradient(ellipse 38% 48% at 40% 48%, alpha(@success_color, 0.18), transparent 100%),
+    radial-gradient(ellipse 32% 44% at 64% 50%, alpha(#3584e4, 0.13), transparent 100%);
+}
+.status-badge {
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-weight: 600;
+}
+.status-badge.badge-idle {
+  background-color: alpha(@window_fg_color, 0.07);
+  color: @window_fg_color;
+}
+.status-badge.badge-connected {
+  background-color: alpha(@success_color, 0.14);
+  color: mix(@window_fg_color, @success_color, 0.75);
+}
+.status-badge.badge-progress {
+  background-color: alpha(@accent_color, 0.12);
+  color: mix(@window_fg_color, @accent_color, 0.75);
+}
+.status-badge.badge-authentication {
+  background-color: alpha(@warning_color, 0.14);
+  color: mix(@window_fg_color, @warning_color, 0.75);
+}
+.status-badge.badge-unavailable {
+  background-color: alpha(@error_color, 0.12);
+  color: mix(@window_fg_color, @error_color, 0.75);
+}
+
+.connection-header.high-contrast .status-badge {
+  border: 1px solid currentColor;
+}
