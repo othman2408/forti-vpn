@@ -521,19 +521,27 @@ class UITests(unittest.TestCase):
         self.window.show_setup()
         dialog = self.window.setup_dialog
         self.assertIn('not been found', dialog.check_status.get_text())
+        self.assertEqual(dialog.pages.get_visible_child_name(), 'install')
+        self.assertFalse(dialog.command_panel.get_visible())
         dialog.check.emit('clicked')
         pump(.3)
         self.assertFalse(state.setup_required)
         self.assertTrue(self.window.primary.get_visible())
         self.assertIn('ready', dialog.check_status.get_text())
+        self.assertEqual(dialog.pages.get_visible_child_name(), 'ready')
+        self.assertFalse(dialog.check.get_visible())
 
     def test_setup_command_copy_and_fresh_setup_can_quit(self):
         self.window.show_setup()
         dialog = self.window.setup_dialog
+        self.assertEqual(dialog.pages.get_visible_child_name(), 'ready')
+        dialog.show_help()
+        self.assertEqual(dialog.pages.get_visible_child_name(), 'install')
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'FortiClient installer.deb'
             path.touch()
             dialog.set_package(str(path))
+            self.assertTrue(dialog.command_panel.get_visible())
             with patch.object(dialog, 'get_clipboard') as clipboard:
                 dialog.copy_button.emit('clicked')
                 self.assertIn(str(path), clipboard.return_value.set.call_args.args[0])
