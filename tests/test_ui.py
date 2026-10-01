@@ -94,6 +94,7 @@ class UITests(unittest.TestCase):
         self.window.workflow.state.status = Status('disconnected')
         self.window.workflow.state.error = ''
         self.window.workflow.state.error_origin = ''
+        self.window.workflow.state.warnings.clear()
         self.window.workflow.state.setup_required = False
         self.window.cli_seen = True
         self.window.exit_requested = False
@@ -243,6 +244,24 @@ class UITests(unittest.TestCase):
         self.assertTrue(self.window.remember.get_active())
         state.profiles.pop()
         self.window.render(state)
+
+    def test_error_and_warning_notices_are_visible_and_open_diagnostics(self):
+        state = self.window.workflow.state
+        state.error = 'Too many bad login attempts. The VPN server temporarily blocked login. Wait a few minutes.'
+        state.error_origin = 'connecting'
+        self.window.render(state)
+        self.assertTrue(self.window.notice_box.get_visible())
+        self.assertEqual(self.window.notice_title.get_text(), 'Login temporarily blocked')
+        self.assertIn('Too many bad login attempts', self.window.error_label.get_text())
+        self.window.details_button.emit('clicked')
+        self.assertIs(self.window.settings_window.get_visible_page(), self.window.settings_window.diagnostics_page)
+        state.error = ''
+        state.status = Status('connected', 'Office VPN')
+        state.warnings = ['Your password could not be saved.']
+        self.window.render(state)
+        self.assertEqual(self.window.notice_title.get_text(), 'Warning')
+        self.assertTrue(self.window.warning_label.get_visible())
+        self.assertEqual(self.window.status_label.get_text(), 'Connected · Office VPN')
 
     def test_rejected_connection_with_pending_cli_status_offers_check_and_cancel(self):
         from forti_vpn.backend import VPNError

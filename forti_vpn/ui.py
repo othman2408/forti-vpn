@@ -161,13 +161,29 @@ class UtilityWindow(Adw.ApplicationWindow):
         self.cancel_button.set_size_request(-1, 42)
         self.cancel_button.set_visible(False)
         content.append(self.cancel_button)
-        self.error_label = label('', 'error')
+        self.notice_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10,
+                                  css_classes=['card', 'operation-notice'], visible=False)
+        notice_heading = Gtk.Box(spacing=8)
+        self.notice_icon = Gtk.Image(icon_name='dialog-warning-symbolic')
+        self.notice_title = label('', 'heading')
+        notice_heading.append(self.notice_icon)
+        notice_heading.append(self.notice_title)
+        self.notice_box.append(notice_heading)
+        self.error_label = label('')
         self.error_label.set_selectable(True)
-        content.append(self.error_label)
+        self.notice_box.append(self.error_label)
+        self.warning_label = label('')
+        self.warning_label.set_selectable(True)
+        self.notice_box.append(self.warning_label)
+        notice_actions = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        notice_actions.set_halign(Gtk.Align.START)
         self.retry_button = button('Try Again', self.retry_operation)
-        self.retry_button.set_halign(Gtk.Align.START)
         self.retry_button.set_visible(False)
-        content.append(self.retry_button)
+        notice_actions.append(self.retry_button)
+        self.details_button = button('View Diagnostics', lambda *_: self.show_diagnostics(), 'flat')
+        notice_actions.append(self.details_button)
+        self.notice_box.append(notice_actions)
+        content.insert_child_after(self.notice_box, heading)
         self.setup_help = button('Setup Help', lambda *_: self.show_setup())
         self.setup_help.set_halign(Gtk.Align.START)
         self.setup_help.set_visible(False)
@@ -315,6 +331,22 @@ class UtilityWindow(Adw.ApplicationWindow):
         if state.error and state.error != previous_error:
             self.error_label.announce(state.error, Gtk.AccessibleAnnouncementPriority.HIGH)
         self.error_label.set_visible(bool(state.error) and not state.setup_required)
+        warning_text = '\n\n'.join(w for w in state.warnings if w != state.error)
+        previous_warning = self.warning_label.get_text()
+        self.warning_label.set_text(warning_text)
+        self.warning_label.set_visible(bool(warning_text))
+        if warning_text and warning_text != previous_warning:
+            self.warning_label.announce(warning_text, Gtk.AccessibleAnnouncementPriority.MEDIUM)
+        self.notice_box.set_visible(bool(state.error or warning_text) and not state.setup_required)
+        title = ('Login temporarily blocked' if 'temporarily blocked login' in state.error else
+                 'Profile could not be loaded' if 'could not load this VPN profile' in state.error else
+                 'Connection issue' if state.error_origin == 'connecting' else 'Operation failed')
+        self.notice_title.set_text(title if state.error else 'Warning')
+        for widget in (self.notice_icon, self.notice_title):
+            widget.remove_css_class('error')
+            widget.remove_css_class('warning')
+            widget.add_css_class('error' if state.error else 'warning')
+
         retry = self.retry_choice(state)
         self.retry_button.set_visible(bool(state.error) and retry is not None and self.profile_dialog is None)
         self.retry_button.set_sensitive(idle)
@@ -417,6 +449,8 @@ class UtilityWindow(Adw.ApplicationWindow):
     def retry_choice(self, state):
         if state.setup_required:
             return 'Check Again'
+        if 'temporarily blocked login' in state.error:
+            return None
         if state.error_origin == 'connecting' and state.status.state == 'disconnected' and self.selected():
             return 'Try Again'
         if state.error_origin == 'disconnecting' and state.status.state == 'connected':
@@ -532,6 +566,10 @@ class UtilityWindow(Adw.ApplicationWindow):
                 return False
             self.settings_window.connect('closed', closed)
         self.settings_window.present(self)
+
+    def show_diagnostics(self):
+        self.show_settings()
+        self.settings_window.set_visible_page(self.settings_window.diagnostics_page)
 
     def indicator_changed(self, available):
         self.indicator_available = available

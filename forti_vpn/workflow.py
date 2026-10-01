@@ -15,6 +15,7 @@ class State:
     error_origin: str = ''
     setup_required: bool = False
     diagnostics: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -50,6 +51,10 @@ class Workflow:
 
     def log(self, text):
         def add():
+            if text.startswith('Warning: '):
+                warning = text.removeprefix('Warning: ')
+                if warning not in self.state.warnings:
+                    self.state.warnings.append(warning)
             self.state.diagnostics.append(time.strftime('%H:%M:%S') + ' ' + text)
             self.state.diagnostics = self.state.diagnostics[-100:]
             self.notify()
@@ -102,6 +107,7 @@ class Workflow:
         revision = self.revision
         if not refresh:
             self.state.error = ''
+            self.state.warnings.clear()
         self.cancel_event = threading.Event()
         self.deadline = time.monotonic() + self.cli.interactive_timeout
         self.notify()

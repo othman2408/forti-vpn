@@ -36,3 +36,7 @@
 .connection-header.high-contrast .status-badge {
   border: 1px solid currentColor;
 }
+
+.operation-notice {
+  padding: 14px;
+}

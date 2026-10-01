@@ -127,6 +127,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertNotIn('SUPERSECRET', message)
         self.assertNotIn('123SECRET', '\n'.join(cli_messages(output)))
         self.assertIn('authentication', cli_failure('Incorrect password', 1))
+        self.assertIn('temporarily blocked login', cli_failure('Login failed: Too many bad login attempts.', 0))
         self.assertIsNone(cli_failure('Failed to save credential to key store.\nDONE.', 0))
         self.assertIn('password storage', cli_failure('Failed to save credential to key store.', 1))
 

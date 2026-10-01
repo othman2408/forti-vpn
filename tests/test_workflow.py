@@ -63,6 +63,17 @@ class WorkflowTests(unittest.TestCase):
         self.workflow.refresh()
         self.pump(lambda: not self.workflow.refreshing)
 
+    def test_warning_events_surface_without_connection_failure(self):
+        self.workflow.log('Warning: Password could not be saved.')
+        self.pump(lambda: bool(self.workflow.state.warnings))
+        self.assertEqual(self.workflow.state.warnings, ['Password could not be saved.'])
+        self.assertFalse(self.workflow.state.error)
+        self.refresh()
+        self.assertEqual(self.workflow.state.warnings, ['Password could not be saved.'])
+        self.workflow.disconnect()
+        self.pump(lambda: self.workflow.state.busy is None)
+        self.assertFalse(self.workflow.state.warnings)
+
     def test_refresh_external_changes_and_reopen(self):
         self.refresh()
         self.assertEqual(self.workflow.state.status.state, 'disconnected')

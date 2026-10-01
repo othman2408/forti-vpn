@@ -143,11 +143,14 @@ AUTH_PROMPTS = (
 
 # Only fixed descriptions are exposed. Never include raw CLI output: a service
 # response can contain a password, token, gateway, or account information.
+STORAGE_WARNING = 'FortiClient could not access its password storage. Unlock your login keyring or turn off Remember password.'
+LOGIN_BLOCKED_MESSAGE = 'Too many bad login attempts. The VPN server temporarily blocked login. Wait a few minutes or ask IT to clear the block.'
 CLI_MESSAGES = (
+    (r'Too many bad login attempts', LOGIN_BLOCKED_MESSAGE),
     (r'(?:Load VPN profile was failed|Failed to load (?:the )?VPN profile)',
      'FortiClient could not load this VPN profile. Check FortiClient’s logs for the profile error.'),
     (r'(?:Failed to save credential to key store|Unable to use system.s key store|Failed to set credentials to GNOME Keyring)',
-     'FortiClient could not access its password storage. Unlock your login keyring or turn off Remember password.'),
+     STORAGE_WARNING),
     (r'(?:Internal communication failed|Failed to communicate with VPN service|Failed sending data to VPN service|Failed to connect with the websocket server)',
      'FortiClient could not communicate with its VPN service. Open FortiClient and retry.'),
     (r'Service rejected our request \(code:\s*\d+\)',
@@ -189,8 +192,7 @@ def cli_failure(output, code):
 
 
 VPN_LOG_MESSAGES = (
-    (r'Too many bad login attempts',
-     'The VPN server temporarily blocked login after too many failed attempts. Wait a few minutes or ask IT to clear the block.'),
+    (r'Too many bad login attempts', LOGIN_BLOCKED_MESSAGE),
     (r'DBUS session bus address not found',
      'FortiClient could not find your desktop session bus. Launch it from your desktop session and retry.'),
 )
@@ -388,7 +390,7 @@ class CLI:
                 for description in cli_messages(pending):
                     if description not in reported:
                         reported.add(description)
-                        log(description)
+                        log(('Warning: ' if description == STORAGE_WARNING else '') + description)
                 matched = False
                 for kind, pattern in compiled:
                     match = pattern.search(pending)
