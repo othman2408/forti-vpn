@@ -15,6 +15,14 @@ A lightweight, unofficial Ubuntu GUI for FortiClient VPN, with connection contro
 
 Built for Ubuntu 26.04 and FortiClient 7.4.3. If the CLI is missing, the app guides you through setup.
 
+Download the `.deb` from [Releases](https://github.com/othman2408/forti-vpn/releases) and install it:
+
+```bash
+sudo apt install ./forti-vpn_0.1.0_all.deb
+```
+
+Or install from source:
+
 ```bash
 sudo apt install python3 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1
 
