@@ -1,6 +1,7 @@
 """Adaptive dialogs with consistent focus, validation, and credential cleanup."""
-from gi.repository import Adw, Gtk
+from gi.repository import Adw, Gio, GLib, Gtk
 from .backend import ProfileSettings, VPNError
+from .gateway import build_gateway, split_gateway
 from .widgets import label, button
 
 
@@ -98,10 +99,14 @@ class ProfileEditor(ContentDialog):
         self.connection = Adw.PreferencesGroup(title='Connection')
         self.name = Adw.EntryRow(title='Profile name', text=existing.name if existing else '')
         self.name.set_sensitive(existing is None)
-        self.gateway = Adw.EntryRow(title='Remote gateway', text=existing.gateway if existing else '')
-        self.gateway.set_tooltip_text('Server hostname or IP, optionally followed by :port')
+        server, port = split_gateway(existing.gateway if existing else '')
+        self.gateway = Adw.EntryRow(title='Remote gateway', text=server)
+        self.gateway.set_tooltip_text('Server hostname or IP address')
+        self.port = Adw.EntryRow(title='Port', text=port)
+        self.port.set_input_purpose(Gtk.InputPurpose.DIGITS)
         self.connection.add(self.name)
         self.connection.add(self.gateway)
+        self.connection.add(self.port)
         self.body.append(self.connection)
         self.authentication = Adw.PreferencesGroup(title='Authentication')
         self.auth = Adw.ComboRow(title='Mode', model=Gtk.StringList.new([
@@ -115,20 +120,26 @@ class ProfileEditor(ContentDialog):
         self.cert = Adw.ComboRow(title='Type', model=Gtk.StringList.new([
             'Keep existing setting' if existing else 'None', 'Local certificate (.p12)', 'Smartcard (PKCS#11)', 'None']))
         self.path = Adw.EntryRow(title='Certificate path or library')
+        self.browse = Gtk.Button(icon_name='folder-open-symbolic', valign=Gtk.Align.CENTER,
+                                 tooltip_text='Choose certificate or library', sensitive=False)
+        self.browse.add_css_class('flat')
+        self.browse.update_property([Gtk.AccessibleProperty.LABEL], ['Choose certificate or library'])
+        self.browse.connect('clicked', self.choose_certificate)
+        self.path.add_suffix(self.browse)
         self.certificate.add(self.cert)
         self.certificate.add(self.path)
         self.body.append(self.certificate)
         self.username.set_sensitive(False)
         self.path.set_sensitive(False)
         self.auth.connect('notify::selected', lambda *_: self.username.set_sensitive(self.auth.get_selected() == 2))
-        self.cert.connect('notify::selected', lambda *_: self.path.set_sensitive(self.cert.get_selected() in (1, 2)))
-        self.body.append(label('Advanced settings remain managed by FortiClient. Password saving is offered when connecting.', 'dim-label'))
+        self.cert.connect('notify::selected', self.certificate_changed)
+        self.body.append(label('Other settings stay managed by FortiClient.', 'dim-label'))
         self.cancel = button('Cancel', self.cancel_or_close)
         self.save_button = button('Save', self.save, 'suggested-action')
         self.set_actions(self.cancel, self.save_button)
         self.set_default_widget(self.save_button)
         self.set_focus(self.gateway if existing else self.name)
-        for row in (self.name, self.gateway, self.username, self.path):
+        for row in (self.name, self.gateway, self.port, self.username, self.path):
             row.connect('entry-activated', self.save)
             row.connect('changed', lambda row: row.remove_css_class('error'))
         self.connect('close-attempt', self.cancel_or_close)
@@ -140,7 +151,9 @@ class ProfileEditor(ContentDialog):
         self.set_title('Edit profile' if existing else 'New profile')
         self.name.set_sensitive(existing is None)
         self.name.set_text(existing.name if existing else '')
-        self.gateway.set_text(existing.gateway if existing else '')
+        server, port = split_gateway(existing.gateway if existing else '')
+        self.gateway.set_text(server)
+        self.port.set_text(port)
         self.username.set_text(existing.username if existing else '')
         self.auth.get_model().splice(0, 1, ['Keep existing setting' if existing else 'Prompt for credentials'])
         self.cert.get_model().splice(0, 1, ['Keep existing setting' if existing else 'None'])
@@ -150,6 +163,43 @@ class ProfileEditor(ContentDialog):
         self.path.set_text('')
         self.path.set_sensitive(False)
         self.set_focus(self.gateway if existing else self.name)
+
+    def certificate_changed(self, *_):
+        selected = self.cert.get_selected()
+        self.path.set_sensitive(selected in (1, 2))
+        self.browse.set_sensitive(selected in (1, 2))
+        self.path.set_title('Certificate file' if selected == 1 else 'PKCS#11 library' if selected == 2
+                            else 'Certificate path or library')
+
+    def choose_certificate(self, *_):
+        kind = self.cert.get_selected()
+        chooser = Gtk.FileDialog(title='Choose client certificate' if kind == 1 else 'Choose PKCS#11 library')
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        preferred = Gtk.FileFilter()
+        preferred.set_name('PKCS#12 certificates' if kind == 1 else 'Shared libraries')
+        for pattern in (('*.p12', '*.pfx', '*.P12', '*.PFX') if kind == 1 else ('*.so', '*.so.*')):
+            preferred.add_pattern(pattern)
+        filters.append(preferred)
+        all_files = Gtk.FileFilter()
+        all_files.set_name('All files')
+        all_files.add_pattern('*')
+        filters.append(all_files)
+        chooser.set_filters(filters)
+        chooser.set_default_filter(preferred)
+        def selected(source, result):
+            try:
+                file = source.open_finish(result)
+                if self.get_root() is None or self.saving or self.cert.get_selected() != kind:
+                    return
+                path = file.get_path()
+                if path:
+                    self.path.set_text(path)
+                else:
+                    self.show_error(self.error, 'Choose a file stored on this computer.')
+            except GLib.Error as exc:
+                if not exc.matches(Gtk.DialogError.quark(), Gtk.DialogError.DISMISSED):
+                    self.show_error(self.error, 'Could not open the file picker. Enter the path instead.')
+        chooser.open(self.parent, None, selected)
 
     def closed(self, *_):
         if self.parent.profile_dialog is self:
@@ -169,9 +219,21 @@ class ProfileEditor(ContentDialog):
     def save(self, *_):
         if self.saving:
             return
-        for row in (self.name, self.gateway, self.username, self.path):
+        for row in (self.name, self.gateway, self.port, self.username, self.path):
             row.remove_css_class('error')
-        settings = ProfileSettings(self.name.get_text().strip(), self.gateway.get_text().strip(),
+        try:
+            gateway = build_gateway(self.gateway.get_text(), self.port.get_text(),
+                                    self.existing.gateway if self.existing else '')
+        except VPNError as exc:
+            row = self.port if 'port' in str(exc).lower() else self.gateway
+            row.add_css_class('error')
+            self.show_error(self.error, str(exc))
+            row.grab_focus()
+            return
+        server, port = split_gateway(gateway)
+        self.gateway.set_text(server)
+        self.port.set_text(port)
+        settings = ProfileSettings(self.name.get_text().strip(), gateway,
             str(self.auth.get_selected()) if self.auth.get_selected() else ('' if self.existing else '1'),
             self.username.get_text(),
             str(self.cert.get_selected()) if self.cert.get_selected() else ('' if self.existing else '3'),

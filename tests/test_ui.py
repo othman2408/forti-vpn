@@ -406,7 +406,8 @@ class UITests(unittest.TestCase):
                 pump(.4)
                 self.assertIs(self.window.profile_dialog, dialog)
                 self.assertTrue(dialog.get_can_close())
-                self.assertEqual(dialog.gateway.get_text(), 'vpn.example.org:443')
+                self.assertEqual(dialog.gateway.get_text(), 'vpn.example.org')
+                self.assertEqual(dialog.port.get_text(), '443')
                 self.assertEqual(dialog.save_button.get_label(), 'Retry Save')
                 self.assertIn('Save rejected', dialog.error.get_text())
                 toast.assert_not_called()
@@ -419,6 +420,33 @@ class UITests(unittest.TestCase):
                 self.window.workflow.refresh()
                 pump(.3)
                 toast.assert_called_once()
+
+    def test_profile_port_and_certificate_picker_submission(self):
+        self.window.profile_editor(self.window.selected())
+        dialog = self.window.profile_dialog
+        pump()
+        self.assertEqual(dialog.gateway.get_text(), 'localhost')
+        self.assertEqual(dialog.port.get_text(), '443')
+        dialog.port.set_text('70000')
+        dialog.save()
+        self.assertTrue(dialog.port.has_css_class('error'))
+        dialog.port.set_text('8443')
+        dialog.cert.set_selected(1)
+        with patch('forti_vpn.dialogs.Gtk.FileDialog') as factory:
+            picker = factory.return_value
+            picker.open_finish.return_value = Gio.File.new_for_path('/tmp/client certificate.p12')
+            dialog.browse.emit('clicked')
+            callback = picker.open.call_args.args[2]
+            callback(picker, object())
+        self.assertEqual(dialog.path.get_text(), '/tmp/client certificate.p12')
+        with patch.object(self.window.workflow, 'save') as save:
+            dialog.save()
+            settings, existing = save.call_args.args
+            self.assertEqual(settings.gateway, 'localhost:8443')
+            self.assertEqual(settings.certificate, '/tmp/client certificate.p12')
+            self.assertEqual(settings.authentication, '')
+            self.assertEqual(existing.name, 'Office VPN')
+        dialog.finish_save(False)
 
     def test_escape_cancels_save_and_leaves_form_for_retry(self):
         from forti_vpn.backend import Cancelled
