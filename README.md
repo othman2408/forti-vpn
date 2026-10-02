@@ -1,6 +1,6 @@
 # Forti-VPN
 
-A lightweight Ubuntu GUI for FortiClient VPN, with simple connection control, profile management, and top-bar integration.
+A lightweight, unofficial Ubuntu GUI for FortiClient VPN, with connection control, profile management, and top-bar integration.
 
 ## Features
 
@@ -13,7 +13,7 @@ A lightweight Ubuntu GUI for FortiClient VPN, with simple connection control, pr
 
 ## Install
 
-Built for Ubuntu 26.04. FortiClient is required. If its CLI is missing, the app guides you through downloading, installing, and checking it.
+Built for Ubuntu 26.04 and FortiClient 7.4.3. If the CLI is missing, the app guides you through setup.
 
 ```bash
 sudo apt install python3 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1
@@ -27,18 +27,26 @@ Open **Forti VPN** from your applications menu. Use **Set Up FortiClient** if ne
 
 ## Use
 
-Select a profile and click **Connect**. Enter your password and MFA code when prompted.
+- Select a profile, click **Connect**, and enter your password or MFA code when prompted.
+- Use **Manage Profile** to create, view, edit, or delete profiles.
+- Open **Settings** for preferences and diagnostics.
+- Click **Refresh** to update profiles and connection status.
 
-Profiles and status are checked once at launch. Use the refresh button to check again.
+Closing the window keeps the app in the top bar. Use **Disconnect and Quit** to exit, or change this behavior in Settings. Top-bar integration requires AppIndicator support.
 
-Use **Manage Profile** for profile actions and **Settings** for preferences and diagnostics.
-Profile setup has separate server and port fields; the default port is 443. **About Forti-VPN** shows version and compatibility information.
+The app never stores passwords or MFA codes; saved passwords are managed by FortiClient.
 
-Closing the window keeps the app in the top bar by default. Use **Disconnect and Quit** to disconnect and exit, or change the close behavior in Settings. Top-bar integration requires AppIndicator support.
+## Screenshots
 
-FortiClient manages the VPN connection and saved passwords. The app does not store passwords or MFA codes.
+Captured from the app using demo data and a simulated connection.
 
-This is an unofficial app, not affiliated with Fortinet. Designed for FortiClient 7.4.3.
+| Connection | Profile editor |
+| :---: | :---: |
+| <img src="docs/screenshots/connection.png" alt="Connected VPN with status badge and disconnect button" width="340"> | <img src="docs/screenshots/profile.png" alt="Profile editor with server, port, authentication, and certificate fields" width="340"> |
+
+| Settings | Diagnostics |
+| :---: | :---: |
+| <img src="docs/screenshots/settings.png" alt="Settings for window behavior, appearance, and password saving" width="340"> | <img src="docs/screenshots/diagnostics.png" alt="Compatibility information, troubleshooting report, and session diagnostics" width="340"> |
 
 ## License
 
