@@ -39,3 +39,7 @@ Closing the window keeps the app in the top bar by default. Use **Disconnect and
 FortiClient manages the VPN connection and saved passwords. The app does not store passwords or MFA codes.
 
 This is an unofficial app, not affiliated with Fortinet. Designed for FortiClient 7.4.3.
+
+## License
+
+Code, documentation, and original icons are licensed under [MIT](LICENSE). FortiClient is installed separately and remains subject to Fortinet's terms. See [NOTICE](NOTICE).

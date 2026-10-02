@@ -55,6 +55,7 @@ def troubleshooting_report(parent, info):
 def show_about(parent):
     dialog = Adw.AboutDialog(application_name='Forti-VPN', application_icon='io.github.fortivpn.Utility',
         developer_name='othman2408', version=__version__, website=REPOSITORY,
+        copyright='Copyright © 2026 othman2408', license_type=Gtk.License.MIT_X11,
         issue_url=REPOSITORY + '/issues',
         comments='An unofficial native GUI for FortiClient VPN. Not affiliated with Fortinet.\n\n'
                  'Designed for Ubuntu 26.04 and FortiClient 7.4.3. FortiClient must be installed separately.')

@@ -15,6 +15,7 @@ if ! /usr/bin/python3 -c 'import gi; gi.require_version("Gtk", "4.0"); gi.requir
 fi
 mkdir -p "$install_dir" "$launcher_dir" "${XDG_DATA_HOME:-$HOME/.local/share}/applications" "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps" "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/symbolic/apps"
 cp -R "$project_dir/forti_vpn" "$install_dir/"
+cp "$project_dir/LICENSE" "$project_dir/NOTICE" "$install_dir/"
 # Quote the installation path for bash without evaluating its contents.
 printf '#!/usr/bin/env bash\ncd -- %q\nexec /usr/bin/python3 -m forti_vpn "$@"\n' "$install_dir" > "$launcher_dir/forti-vpn"
 chmod 755 "$launcher_dir/forti-vpn"

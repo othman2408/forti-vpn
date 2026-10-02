@@ -1,0 +1,16 @@
+Forti-VPN
+Copyright (c) 2026 othman2408
+
+The project's code, documentation, and original application icons are
+licensed under the MIT License. See LICENSE.
+
+Forti-VPN is an independent, unofficial GUI for the FortiClient CLI. It is
+not affiliated with, endorsed by, or sponsored by Fortinet.
+
+Fortinet and FortiClient are trademarks of Fortinet, Inc. References to
+these names identify the external product with which this app works;
+the MIT License grants no rights to those trademarks.
+
+FortiClient is not bundled or redistributed with Forti-VPN. It must be
+obtained separately and is subject to Fortinet's own license terms.
+System dependencies are installed separately and retain their own licenses.
