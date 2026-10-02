@@ -1,5 +1,6 @@
 """Native preferences and session diagnostics."""
 from gi.repository import Adw, Gio, GLib, Gtk
+from .support import probe_client, troubleshooting_report
 
 
 class SettingsDialog(Adw.PreferencesDialog):
@@ -32,6 +33,17 @@ class SettingsDialog(Adw.PreferencesDialog):
         general.add(auth)
         self.diagnostics_page = Adw.PreferencesPage(title='Diagnostics', icon_name='utilities-terminal-symbolic')
         self.add(self.diagnostics_page)
+        system = Adw.PreferencesGroup(title='Compatibility', description='Designed for Ubuntu 26.04 and FortiClient 7.4.3.')
+        self.client_info = {'version': 'Checking…', 'path': 'Checking…'}
+        self.client_row = Adw.ActionRow(title='FortiClient', subtitle='Checking installed version…')
+        self.cli_row = Adw.ActionRow(title='CLI executable', subtitle='Checking…')
+        system.add(self.client_row)
+        system.add(self.cli_row)
+        self.report_button = Gtk.Button(label='Copy troubleshooting report', sensitive=False,
+                                        margin_top=12, tooltip_text='Copy versions, connection state, and sanitized session events')
+        self.report_button.connect('clicked', self.copy_report)
+        system.add(self.report_button)
+        self.diagnostics_page.add(system)
         group = Adw.PreferencesGroup(title='Session log', description='Operation events only. Passwords, codes, and raw terminal output are excluded.')
         self.text = Gtk.TextView(editable=False, cursor_visible=True, monospace=True, wrap_mode=Gtk.WrapMode.WORD_CHAR)
         self.text.update_property([Gtk.AccessibleProperty.LABEL], ['Sanitized session diagnostics'])
@@ -39,7 +51,7 @@ class SettingsDialog(Adw.PreferencesDialog):
         self.text.set_bottom_margin(12)
         self.text.set_left_margin(12)
         self.text.set_right_margin(12)
-        scroll = Gtk.ScrolledWindow(min_content_height=280, hscrollbar_policy=Gtk.PolicyType.NEVER)
+        scroll = Gtk.ScrolledWindow(min_content_height=180, hscrollbar_policy=Gtk.PolicyType.NEVER)
         scroll.add_css_class('card')
         scroll.set_child(self.text)
         group.add(scroll)
@@ -57,6 +69,17 @@ class SettingsDialog(Adw.PreferencesDialog):
         group.add(actions)
         self.diagnostics_page.add(group)
         self.update()
+        probe_client(parent, self.client_detected)
+
+    def client_detected(self, info):
+        self.client_info = info
+        self.client_row.set_subtitle(info['version'])
+        self.cli_row.set_subtitle(GLib.markup_escape_text(info['path']))
+        self.report_button.set_sensitive(True)
+
+    def copy_report(self, *_):
+        self.get_clipboard().set(troubleshooting_report(self.parent, self.client_info))
+        self.add_toast(Adw.Toast(title='Troubleshooting report copied', timeout=3))
 
     def store(self, key, value):
         try:

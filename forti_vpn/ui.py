@@ -11,6 +11,7 @@ from .preferences import Preferences
 from .workflow import Workflow
 from .indicator import Indicator
 from .settings import SettingsDialog
+from .support import show_about
 from .dialogs import ContentDialog, AuthenticationDialog, ProfileEditor
 from .widgets import label, button, icon_button, margins
 from .setup import SetupDialog
@@ -53,6 +54,7 @@ class UtilityWindow(Adw.ApplicationWindow):
         menu = Gio.Menu()
         menu.append('Settings', 'app.settings')
         menu.append('Set Up FortiClient', 'app.setup')
+        menu.append('About Forti-VPN', 'app.about')
         menu.append('Disconnect and Quit', 'app.quit')
         menu_button = Gtk.MenuButton(icon_name='open-menu-symbolic', menu_model=menu, tooltip_text='Application menu')
         menu_button.update_property([Gtk.AccessibleProperty.LABEL], ['Application menu'])
@@ -661,6 +663,7 @@ class Application(Adw.Application):
         provider.load_from_path(str(Path(__file__).parent / 'assets' / 'style.css'))
         Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         for name, callback in [('settings', lambda: self.window.show_settings()), ('setup', lambda: self.window.show_setup()),
+                               ('about', lambda: show_about(self.window)),
                                ('quit', lambda: self.window.request_exit())]:
             action = Gio.SimpleAction.new(name, None)
             action.connect('activate', lambda action, param, callback=callback: callback())

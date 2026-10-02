@@ -266,6 +266,22 @@ class CLI:
             raise VPNError('FortiClient could not complete ' + args[0] + '. Check its service and permissions.')
         return result.stdout.replace('\r\n', '\n')
 
+    def information(self):
+        """Read public version information; discard serial and device identifiers."""
+        executable = self.resolve_executable()
+        home = str(Path.home())
+        display_path = '~/' + executable[len(home) + 1:] if executable.startswith(home + '/') else executable
+        version = 'Could not determine'
+        try:
+            result = subprocess.run([executable, 'version'], capture_output=True, text=True,
+                                    timeout=self.read_timeout, env=self.environment())
+            match = re.search(r'^FortiClient Version:[ \t]*([0-9]+(?:\.[0-9]+){1,3})[ \t\r]*$', result.stdout, re.M)
+            if result.returncode == 0 and match:
+                version = match[1]
+        except (OSError, subprocess.TimeoutExpired):
+            version = 'Unavailable'
+        return {'version': version, 'path': display_path}
+
     def list_profiles(self):
         return parse_profiles(self.read('list'))
 
