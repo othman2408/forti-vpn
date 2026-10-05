@@ -557,6 +557,7 @@ class UtilityWindow(Adw.ApplicationWindow):
         self.present()
         if self.setup_dialog is None:
             self.setup_dialog = SetupDialog(self)
+            self.workflow.refresh()
         self.setup_dialog.present(self)
 
     def show_settings(self):

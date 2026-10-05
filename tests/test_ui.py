@@ -598,15 +598,20 @@ class UITests(unittest.TestCase):
         with patch.object(self.window.workflow.cli, 'status', side_effect=CLINotFound('CLI missing')):
             self.window.workflow.refresh()
             pump(.3)
+            self.window.show_setup()
+            pump(.3)
         self.assertTrue(state.setup_required)
         self.assertTrue(self.window.setup_group.get_visible())
         self.assertFalse(self.window.profiles_group.get_visible())
         self.assertFalse(self.window.primary.get_visible())
-        self.window.show_setup()
         dialog = self.window.setup_dialog
         self.assertIn('not been found', dialog.check_status.get_text())
         self.assertEqual(dialog.pages.get_visible_child_name(), 'install')
         self.assertFalse(dialog.command_panel.get_visible())
+        visible, installer_bounds = dialog.select_button.compute_bounds(self.window)
+        _, footer_bounds = dialog.footer.compute_bounds(self.window)
+        self.assertTrue(visible)
+        self.assertLessEqual(installer_bounds.get_y() + installer_bounds.get_height(), footer_bounds.get_y())
         dialog.check.emit('clicked')
         pump(.3)
         self.assertFalse(state.setup_required)
@@ -614,6 +619,32 @@ class UITests(unittest.TestCase):
         self.assertIn('ready', dialog.check_status.get_text())
         self.assertEqual(dialog.pages.get_visible_child_name(), 'ready')
         self.assertFalse(dialog.check.get_visible())
+
+    def test_setup_checks_once_on_open_then_only_on_request(self):
+        with patch.object(self.window.workflow, 'refresh', wraps=self.window.workflow.refresh) as refresh:
+            self.window.show_setup()
+            pump(.3)
+            self.assertEqual(refresh.call_count, 1)
+            self.window.show_setup()
+            pump(2.2)
+            self.assertEqual(refresh.call_count, 1)
+            self.window.setup_dialog.show_help()
+            self.window.setup_dialog.check.emit('clicked')
+            pump(.3)
+            self.assertEqual(refresh.call_count, 2)
+
+    def test_installed_but_unavailable_client_shows_recovery(self):
+        from forti_vpn.backend import VPNError
+        with patch.object(self.window.workflow.cli, 'status', side_effect=VPNError('Service is unavailable')):
+            self.window.show_setup()
+            pump(.3)
+        dialog = self.window.setup_dialog
+        self.assertFalse(self.window.workflow.state.setup_required)
+        self.assertEqual(dialog.pages.get_visible_child_name(), 'recovery')
+        self.assertIn('CLI was found', dialog.recovery_details.get_text())
+        dialog.check.emit('clicked')
+        pump(.3)
+        self.assertEqual(dialog.pages.get_visible_child_name(), 'ready')
 
     def test_setup_command_copy_and_fresh_setup_can_quit(self):
         self.window.show_setup()

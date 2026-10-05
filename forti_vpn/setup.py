@@ -29,6 +29,17 @@ class SetupDialog(ContentDialog):
         ready.append(help_button)
         self.pages.add_named(ready, 'ready')
 
+        recovery = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
+                           margin_top=12, margin_bottom=12)
+        self.recovery_title = label('FortiClient needs attention', 'title-3')
+        self.recovery_details = label('')
+        self.recovery_details.set_selectable(True)
+        recovery.append(self.recovery_title)
+        recovery.append(self.recovery_details)
+        self.recovery_help = button('Installation Help', self.show_help, 'flat')
+        recovery.append(self.recovery_help)
+        self.pages.add_named(recovery, 'recovery')
+
         install = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=24)
         self.install_title = label('Install FortiClient to get started.', 'title-3')
         install.append(self.install_title)
@@ -108,8 +119,14 @@ class SetupDialog(ContentDialog):
         self.check.set_sensitive(not state.busy and not self.parent.workflow.refreshing)
         refreshing = self.parent.workflow.refreshing
         ready = not state.setup_required and state.status.state != 'unavailable'
-        if not refreshing:
-            self.pages.set_visible_child_name('ready' if ready and not self.showing_help else 'install')
+        page = ('install' if self.showing_help or state.setup_required
+                else 'ready' if ready else 'recovery')
+        self.pages.set_visible_child_name(page)
+        self.recovery_title.set_text('Checking FortiClient…' if refreshing else 'FortiClient needs attention')
+        self.recovery_details.set_text('Checking the CLI and VPN service.' if refreshing else
+            'The CLI was found, but the VPN is not ready. Open FortiClient to finish setup, '
+            'or ask your IT team to check its service.')
+        self.recovery_help.set_visible(not refreshing)
         ready_page = self.pages.get_visible_child_name() == 'ready'
         self.check.set_visible(not ready_page or refreshing)
         self.close_button.remove_css_class('suggested-action')
@@ -127,6 +144,8 @@ class SetupDialog(ContentDialog):
         if self.check_status.get_text() != message:
             self.check_status.set_text(message)
             self.check_status.announce(message, Gtk.AccessibleAnnouncementPriority.MEDIUM)
+        # Recalculate height after switching between compact and installation pages.
+        self.set_content_height(-1)
 
     def choose_package(self, *_):
         dialog = Gtk.FileDialog(title='Choose FortiClient installer')
