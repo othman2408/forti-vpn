@@ -37,6 +37,7 @@ Open **Forti VPN** from your applications menu. Use **Set Up FortiClient** if ne
 
 - Select a profile, click **Connect**, and enter your password or MFA code when prompted.
 - Use **Manage Profile** to create, view, edit, or delete profiles.
+- Use **Manage Profile → Update Saved Password** to reconnect with a new saved login password.
 - Open **Settings** for preferences and diagnostics.
 - Click **Refresh** to update profiles and connection status.
 

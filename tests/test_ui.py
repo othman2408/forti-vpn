@@ -291,6 +291,7 @@ class UITests(unittest.TestCase):
         self.assertTrue(self.window.view_button.get_sensitive())
         self.assertFalse(self.window.edit_button.get_sensitive())
         self.assertFalse(self.window.delete_button.get_sensitive())
+        self.assertFalse(self.window.password_button.get_sensitive())
         self.assertIn('Disconnect', self.window.edit_button.get_tooltip_text())
         self.window.manage_button.popup()
         pump()
@@ -306,6 +307,36 @@ class UITests(unittest.TestCase):
         self.assertIn('organization', self.window.delete_button.get_tooltip_text())
         self.assertFalse(self.window.edit_button.get_sensitive())
         state.profiles[0] = Profile('Office VPN', {'Remote Gateway': 'localhost:443', 'Username': 'worker'})
+
+    def test_update_saved_password_confirms_and_uses_existing_authentication_flow(self):
+        self.window.username.set_text('worker')
+        self.window.remember.set_active(False)
+        with patch.object(self.window.workflow, 'connect') as connect:
+            self.window.password_button.emit('clicked')
+            pump()
+            dialog = next(dialog for dialog in self.window.get_dialogs() if isinstance(dialog, Adw.AlertDialog))
+            self.assertEqual(dialog.get_heading(), 'Update saved password?')
+            self.assertIn('worker', dialog.get_body())
+            connect.assert_not_called()
+            dialog.emit('response', 'save')
+            connect.assert_called_once_with(self.window.selected(), 'worker', True)
+            self.assertFalse(self.window.remember.get_active())
+
+    def test_update_saved_password_cancel_and_external_connection(self):
+        with patch.object(self.window.workflow, 'connect') as connect:
+            self.window.update_saved_password()
+            pump()
+            dialog = next(dialog for dialog in self.window.get_dialogs() if isinstance(dialog, Adw.AlertDialog))
+            dialog.emit('response', 'cancel')
+            connect.assert_not_called()
+            dialog.force_close()
+            pump()
+            self.window.update_saved_password()
+            pump()
+            dialog = next(dialog for dialog in self.window.get_dialogs() if isinstance(dialog, Adw.AlertDialog))
+            self.window.workflow.state.status = Status('connected', 'Office VPN')
+            dialog.emit('response', 'save')
+            connect.assert_not_called()
 
     def test_prepared_editor_populates_latest_profile_and_replenishes_after_close(self):
         self.window.prepare_editor()

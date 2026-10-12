@@ -109,6 +109,18 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(self.connect().state, 'connected')
         self.assertEqual(self.prompts.count('mfa'), 2)
 
+    def test_updating_saved_password_forces_a_fresh_prompt(self):
+        fields = {**FIELDS, 'Save Password': 'Enabled'}
+        self.write_state(profiles={'Office VPN': fields})
+        self.assertEqual(self.connect().state, 'connected')
+        self.assertEqual(self.prompts, ['password', 'mfa'])
+        calls = [json.loads(line) for line in self.path.with_suffix('.args').read_text().splitlines()]
+        command = next(call for call in calls if call[1] == 'connect')
+        self.assertIn('-p', command)
+        self.assertIn('-s', command)
+        self.assertNotIn('SUPERSECRET', str(calls) + '\n'.join(self.logs))
+        self.assertNotIn('123SECRET', str(calls) + '\n'.join(self.logs))
+
     def test_keyring_warning_still_verifies_actual_connection(self):
         self.write_state('keyring_warning')
         self.assertEqual(self.connect().state, 'connected')

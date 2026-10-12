@@ -130,8 +130,11 @@ class UtilityWindow(Adw.ApplicationWindow):
         self.new_button = icon_button('New', 'list-add-symbolic', menu_action(self.new_profile))
         self.view_button = icon_button('View', 'dialog-information-symbolic', menu_action(self.view_profile))
         self.edit_button = icon_button('Edit', 'document-edit-symbolic', menu_action(self.edit_profile))
+        self.password_button = icon_button('Update Saved Password', 'dialog-password-symbolic',
+                                           menu_action(self.update_saved_password))
+        self.password_button.update_property([Gtk.AccessibleProperty.LABEL], ['Update saved password'])
         self.delete_button = icon_button('Delete', 'user-trash-symbolic', menu_action(self.delete_profile))
-        for widget in (self.new_button, self.view_button, self.edit_button, self.delete_button):
+        for widget in (self.new_button, self.view_button, self.edit_button, self.password_button, self.delete_button):
             widget.add_css_class('flat')
             widget.get_child().set_halign(Gtk.Align.START)
             menu_content.append(widget)
@@ -281,6 +284,11 @@ class UtilityWindow(Adw.ApplicationWindow):
         self.view_button.set_sensitive(idle and profile is not None)
         self.edit_button.set_sensitive(idle and profile is not None and not locked)
         self.delete_button.set_sensitive(idle and profile is not None and not locked)
+        self.password_button.set_sensitive(idle and profile is not None and state.status.state == 'disconnected')
+        self.password_button.set_tooltip_text('Reconnect and replace the password saved by FortiClient'
+            if state.status.state == 'disconnected' else 'Disconnect the VPN before updating a saved password.')
+        self.password_button.update_property([Gtk.AccessibleProperty.DESCRIPTION],
+                                            [self.password_button.get_tooltip_text()])
         lock_reason = ('This profile is managed by your organization.' if profile and profile.managed
                        else 'Disconnect this profile before editing or deleting it.' if locked else '')
         for widget, name in ((self.edit_button, 'Edit'), (self.delete_button, 'Delete')):
@@ -509,6 +517,35 @@ class UtilityWindow(Adw.ApplicationWindow):
     def edit_profile(self, *_):
         if self.selected():
             self.profile_editor(self.selected())
+
+    def update_saved_password(self, *_):
+        profile = self.selected()
+        state = self.workflow.state
+        if profile is None or state.busy or state.status.state != 'disconnected':
+            return
+        username = self.username.get_text().strip() or profile.username
+        account = ' as “' + username + '”' if username else ''
+        dialog = Adw.AlertDialog(heading='Update saved password?',
+            body='Connect to “' + profile.name + '”' + account +
+                 ' and save the password you enter in FortiClient. MFA may be required. The VPN will stay connected.')
+        dialog.add_response('cancel', 'Cancel')
+        dialog.add_response('save', 'Connect and Save')
+        dialog.set_response_appearance('save', Adw.ResponseAppearance.SUGGESTED)
+        dialog.set_default_response('cancel')
+        dialog.set_close_response('cancel')
+        def respond(_, response):
+            if response != 'save':
+                return
+            current = self.workflow.state
+            if (current.busy or current.status.state != 'disconnected'
+                    or not any(item.name == profile.name for item in current.profiles)):
+                self.show_toast('Refresh profiles and disconnect the VPN before updating the saved password.')
+                return
+            # Remember=True forces a fresh password prompt, even for saved profiles.
+            # Credentials still go only through the existing PTY authentication flow.
+            self.workflow.connect(profile, username, True)
+        dialog.connect('response', respond)
+        dialog.present(self)
 
     def prepare_editor(self):
         self.editor_prepare_source = None
