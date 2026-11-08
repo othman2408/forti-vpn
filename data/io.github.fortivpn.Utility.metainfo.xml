@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2026 othman2408 -->
+<component type="desktop-application">
+  <id>io.github.fortivpn.Utility</id>
+  <metadata_license>MIT</metadata_license>
+  <!-- MIT, plus the Adwaita icons compiled into the app (see NOTICE). -->
+  <project_license>MIT AND (LGPL-3.0-only OR CC-BY-SA-3.0)</project_license>
+
+  <name>Forti VPN</name>
+  <summary>Connect and manage FortiClient VPN</summary>
+  <developer id="io.github.othman2408">
+    <name>othman2408</name>
+  </developer>
+
+  <description>
+    <p>
+      Forti VPN is an unofficial desktop app for the FortiClient VPN command-line
+      client on Linux. It connects and disconnects with password and MFA prompts,
+      and manages VPN profiles without a terminal.
+    </p>
+    <ul>
+      <li>Connect and disconnect with password and MFA support</li>
+      <li>Create, view, edit, and delete VPN profiles</li>
+      <li>Keep the app in the system tray when the window closes</li>
+      <li>Choose light, dark, or system appearance</li>
+      <li>View sanitized diagnostics and copy a troubleshooting report</li>
+    </ul>
+    <p>
+      FortiClient is not included: install it separately from Fortinet. The app
+      guides you through setup when the FortiClient CLI is missing. Passwords and
+      MFA codes are never stored by the app.
+    </p>
+    <p>
+      Forti VPN is not affiliated with, endorsed by, or sponsored by Fortinet.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">io.github.fortivpn.Utility.desktop</launchable>
+  <provides>
+    <binary>forti-vpn</binary>
+  </provides>
+
+  <url type="homepage">https://github.com/othman2408/forti-vpn</url>
+  <url type="bugtracker">https://github.com/othman2408/forti-vpn/issues</url>
+  <url type="vcs-browser">https://github.com/othman2408/forti-vpn</url>
+
+  <content_rating type="oars-1.1"/>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#99c1f1</color>
+    <color type="primary" scheme_preference="dark">#1a5fb4</color>
+  </branding>
+
+  <!-- The window's minimum height shrinks to fit shorter screens. -->
+  <requires>
+    <display_length compare="ge">600</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+
+  <keywords>
+    <keyword>VPN</keyword>
+    <keyword>FortiClient</keyword>
+    <keyword>FortiGate</keyword>
+    <keyword>SSL VPN</keyword>
+  </keywords>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Connected to a VPN profile</caption>
+      <image type="source" width="480" height="740">https://raw.githubusercontent.com/othman2408/forti-vpn/main/docs/screenshots/connection.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Editing a profile's server, authentication, and certificate</caption>
+      <image type="source" width="480" height="740">https://raw.githubusercontent.com/othman2408/forti-vpn/main/docs/screenshots/profile.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Window, appearance, and password settings</caption>
+      <image type="source" width="480" height="740">https://raw.githubusercontent.com/othman2408/forti-vpn/main/docs/screenshots/settings.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Compatibility information and session diagnostics</caption>
+      <image type="source" width="480" height="740">https://raw.githubusercontent.com/othman2408/forti-vpn/main/docs/screenshots/diagnostics.png</image>
+    </screenshot>
+  </screenshots>
+
+  <releases>
+    <release version="0.2.0" date="2026-11-08">
+      <url type="details">https://github.com/othman2408/forti-vpn/releases/tag/v0.2.0</url>
+      <description>
+        <p>Rust rewrite for all major Linux distributions.</p>
+        <ul>
+          <li>Packages for Debian and Ubuntu, Fedora, RHEL-compatible systems, openSUSE, and Arch Linux</li>
+          <li>Setup guidance for each distribution's FortiClient package and tray support</li>
+          <li>A tray icon that shows whether the VPN is connected</li>
+          <li>Connect uses the password FortiClient has saved for a profile; Update Saved Password changes it</li>
+          <li>When FortiClient's service is stopped, the app says so and shows the command to start it</li>
+          <li>Preferences from version 0.1.0 are kept</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.1.0" date="2026-10-02">
+      <url type="details">https://github.com/othman2408/forti-vpn/releases/tag/v0.1.0</url>
+      <description>
+        <p>First release, for Ubuntu 26.04.</p>
+      </description>
+    </release>
+  </releases>
+</component>

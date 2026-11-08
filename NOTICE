@@ -7,10 +7,28 @@ licensed under the MIT License. See LICENSE.
 Forti-VPN is an independent, unofficial GUI for the FortiClient CLI. It is
 not affiliated with, endorsed by, or sponsored by Fortinet.
 
-Fortinet and FortiClient are trademarks of Fortinet, Inc. References to
-these names identify the external product with which this app works;
-the MIT License grants no rights to those trademarks.
+FortiClient® is a registered trademark of Fortinet, Inc. Fortinet and
+FortiClient are trademarks of Fortinet, Inc. References to these names
+identify the external product with which this app works; the MIT License
+grants no rights to those trademarks.
 
 FortiClient is not bundled or redistributed with Forti-VPN. It must be
 obtained separately and is subject to Fortinet's own license terms.
-System dependencies are installed separately and retain their own licenses.
+
+The forti-vpn binary includes Rust crates under their own licenses (MIT,
+Apache-2.0, Unlicense, and Apache-2.0 WITH LLVM-exception, most of them
+dual-licensed with MIT). Packages ship their license texts in
+THIRD-PARTY-LICENSES.txt, which scripts/third-party-licenses generates.
+
+The symbolic icons in crates/forti-vpn/resources/icons (every file named
+*-symbolic.svg there), which are compiled into the forti-vpn binary, come
+from the Adwaita icon theme by the GNOME Project (https://www.gnome.org)
+and are licensed under the terms of either the GNU LGPL v3
+(LGPL-3.0-only) or the Creative Commons Attribution-Share Alike 3.0
+licence (CC-BY-SA-3.0, https://creativecommons.org/licenses/by-sa/3.0/).
+emblem-ok-symbolic.svg is Adwaita's object-select-symbolic.svg. The app's own icons, named
+io.github.fortivpn.Utility* (in data/icons and
+crates/forti-vpn/resources/icons), are original and MIT licensed.
+
+GTK, libadwaita, and the other system libraries are installed separately
+and retain their own licenses.

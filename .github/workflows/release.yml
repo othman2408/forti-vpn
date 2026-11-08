@@ -1,0 +1,147 @@
+name: Release
+
+# Builds the release assets for a v* tag and saves them as a draft release
+# to check before publishing (docs/releases.md). Run by hand on a branch, it
+# builds the same assets as workflow artifacts and creates no release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  sources:
+    name: Source and vendor tarballs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check that the tag matches the version
+        if: github.ref_type == 'tag'
+        run: |
+          version=$(sed -n 's/^version = "\([^"]*\)".*/\1/p' Cargo.toml | head -n 1)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match version $version in Cargo.toml"
+            exit 1
+          fi
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - run: make dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-sources
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  packages:
+    name: ${{ matrix.format }} package
+    needs: sources
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # deb on ubuntu:24.04, rpm on almalinux:10, arch on archlinux:latest.
+        format: [deb, rpm, arch]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-sources
+          path: sources
+      - name: Build in a container
+        run: |
+          scripts/build-packages.sh --engine docker --sources sources --output out \
+            ${{ matrix.format }}
+          rm out/SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-${{ matrix.format }}
+          path: out/
+          if-no-files-found: error
+
+  flatpak-sources:
+    name: Flatpak cargo sources
+    runs-on: ubuntu-24.04
+    env:
+      # flatpak/flatpak-builder-tools, which publishes no releases.
+      GENERATOR: https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/41c20aa10819cdb2a4f3ca171758a96d1955c018/cargo/flatpak-cargo-generator.py
+    steps:
+      - uses: actions/checkout@v7
+      - name: Generate cargo-sources.json from Cargo.lock
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-aiohttp python3-tomlkit
+          curl -fsSL -o "$RUNNER_TEMP/flatpak-cargo-generator.py" "$GENERATOR"
+          python3 "$RUNNER_TEMP/flatpak-cargo-generator.py" Cargo.lock \
+            -o packaging/flatpak/cargo-sources.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flatpak-cargo-sources
+          path: packaging/flatpak/cargo-sources.json
+          if-no-files-found: error
+
+  flatpak:
+    name: Flatpak bundle (experimental)
+    needs: flatpak-sources
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: flatpak-cargo-sources
+          path: packaging/flatpak
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: packaging/flatpak/io.github.fortivpn.Utility.yml
+          bundle: io.github.fortivpn.Utility.flatpak
+          artifact-name: release-flatpak
+          cache: false
+
+  release:
+    name: Draft release
+    # Waits for the Flatpak, but only the tarballs and the packages must
+    # succeed: the Flatpak is experimental and never holds up a release.
+    needs: [sources, packages, flatpak]
+    if: >-
+      github.ref_type == 'tag' && !cancelled() &&
+      needs.sources.result == 'success' && needs.packages.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Note a missing Flatpak bundle
+        if: needs.flatpak.result != 'success'
+        env:
+          RESULT: ${{ needs.flatpak.result }}
+        run: >-
+          echo "::warning::The experimental Flatpak bundle did not build ($RESULT), so the
+          draft release has none. Remove it from the release notes or attach it by hand."
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-*
+          path: assets
+          merge-multiple: true
+      - name: Write SHA256SUMS
+        working-directory: assets
+        run: |
+          find . -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort | xargs sha256sum >../SHA256SUMS
+          mv ../SHA256SUMS .
+          cat SHA256SUMS
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
+            --title "Forti-VPN $version" --notes-file "docs/release-notes/$version.md" \
+            assets/*

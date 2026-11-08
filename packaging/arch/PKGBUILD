@@ -1,0 +1,72 @@
+# Maintainer: othman2408 <acerxr@gmail.com>
+#
+# Follows the Arch Rust package guidelines. `scripts/build-packages.sh arch`
+# builds this PKGBUILD from the working tree instead of a release.
+
+pkgname=forti-vpn
+pkgver=0.2.0
+pkgrel=1
+pkgdesc='Unofficial desktop app for FortiClient VPN'
+arch=('x86_64' 'aarch64')
+url='https://github.com/othman2408/forti-vpn'
+# forti-vpn is MIT; the Adwaita symbolic icons compiled into it are
+# LGPL-3.0-only OR CC-BY-SA-3.0 (see NOTICE), and the crates compiled
+# into it are listed with their license texts in THIRD-PARTY-LICENSES.txt.
+license=(
+  'MIT'
+  'LGPL-3.0-only OR CC-BY-SA-3.0'
+  'Apache-2.0 OR MIT'
+  'MIT OR Unlicense'
+  'Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT'
+)
+depends=(
+  'adwaita-icon-theme'
+  'gcc-libs'
+  'glib2'
+  'glibc'
+  'gtk4'
+  'hicolor-icon-theme'
+  'libadwaita'
+  'librsvg'
+)
+makedepends=('cargo')
+optdepends=(
+  'forticlient-vpn: the FortiClient VPN CLI that this app controls (AUR)'
+  'gnome-shell-extension-appindicator: tray icon on GNOME'
+)
+source=("$pkgname-$pkgver.tar.gz::$url/releases/download/v$pkgver/$pkgname-$pkgver.tar.gz")
+# The tarball contains this file, so this copy cannot carry its checksum.
+# Before building from it, run updpkgsums and compare the checksum it
+# writes with forti-vpn-$pkgver.tar.gz in the release's SHA256SUMS. The AUR
+# copy carries the checksum: run updpkgsums there for each release.
+sha256sums=('SKIP')
+
+prepare() {
+  cd "$pkgname-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc --print host-tuple)"
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo build --frozen --release -p forti-vpn
+  CARGO='cargo --frozen' sh scripts/third-party-licenses \
+    -o target/release/THIRD-PARTY-LICENSES.txt
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  # The release profile reuses what build() compiled.
+  cargo test --frozen --release -p forti-vpn-core
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  # Also installs LICENSE and THIRD-PARTY-LICENSES.txt to
+  # /usr/share/licenses/forti-vpn, as the MIT license requires.
+  make install DESTDIR="$pkgdir" PREFIX=/usr CARGO_TARGET_DIR=target
+}

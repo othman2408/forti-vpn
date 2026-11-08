@@ -1,0 +1,61 @@
+# Experimental, self-hosted Flatpak of Forti VPN; not for Flathub.
+#
+# The app runs the host's FortiClient CLI through `flatpak-spawn --host`,
+# which needs org.freedesktop.Flatpak: a deliberate sandbox escape that lets
+# the app run any command on the host. See docs/development.md.
+#
+# Crates come from cargo-sources.json, generated next to this file from
+# Cargo.lock (CI does this; it is not committed):
+#   python3 flatpak-cargo-generator.py Cargo.lock \
+#     -o packaging/flatpak/cargo-sources.json
+#   flatpak-builder --user --install --force-clean build-dir \
+#     packaging/flatpak/io.github.fortivpn.Utility.yml
+id: io.github.fortivpn.Utility
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: forti-vpn
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  # Runs FortiClient on the host (flatpak-spawn --host).
+  - --talk-name=org.freedesktop.Flatpak
+  # The tray icon.
+  - --talk-name=org.kde.StatusNotifierWatcher
+  # Choosing a downloaded FortiClient package during setup.
+  - --filesystem=xdg-download:ro
+  # FortiClient's VPN log, for diagnostics.
+  - --filesystem=/var/log/forticlient:ro
+modules:
+  - name: forti-vpn
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      env:
+        # flatpak-cargo-generator writes the vendored-sources config here.
+        CARGO_HOME: /run/build/forti-vpn/cargo
+        CARGO_NET_OFFLINE: 'true'
+    build-commands:
+      - make build
+      - make install PREFIX=/app DESKTOP_EXEC=forti-vpn LICENSEDIR=/app/share/licenses/io.github.fortivpn.Utility
+    sources:
+      - type: dir
+        path: ../..
+        # Build output and local state. A `make vendor` .cargo/config.toml
+        # would point cargo at the skipped vendor/.
+        skip:
+          - .cache
+          - .cargo
+          - .flatpak-builder
+          - .git
+          - build-dir
+          - dist
+          - flatpak_app
+          - repo
+          - target
+          - vendor
+      - cargo-sources.json

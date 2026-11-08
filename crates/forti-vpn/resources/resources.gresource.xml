@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Compiled by build.rs. AdwApplication loads style.css from the resource
+  base path, and GtkApplication adds icons/ to the icon theme as part of the
+  hicolor fallback theme, so these icons resolve by name even when the app
+  is not installed or the desktop's icon theme lacks them.
+
+  Source directories: this folder, then data/icons/hicolor of the workspace.
+-->
+<gresources>
+  <gresource prefix="/io/github/fortivpn/Utility">
+    <file>style.css</file>
+
+    <!-- Symbolic icons from the Adwaita icon theme (LGPL-3.0-only OR CC-BY-SA-3.0). -->
+    <file>icons/scalable/actions/document-edit-symbolic.svg</file>
+    <file>icons/scalable/actions/document-save-symbolic.svg</file>
+    <file>icons/scalable/actions/edit-clear-all-symbolic.svg</file>
+    <file>icons/scalable/actions/edit-copy-symbolic.svg</file>
+    <file>icons/scalable/actions/list-add-symbolic.svg</file>
+    <file>icons/scalable/actions/open-menu-symbolic.svg</file>
+    <file>icons/scalable/actions/view-more-symbolic.svg</file>
+    <file>icons/scalable/actions/view-refresh-symbolic.svg</file>
+    <file>icons/scalable/apps/utilities-terminal-symbolic.svg</file>
+    <file>icons/scalable/categories/preferences-system-symbolic.svg</file>
+    <!-- Adwaita's object-select-symbolic: newer Adwaita releases dropped emblem-ok-symbolic. -->
+    <file>icons/scalable/emblems/emblem-ok-symbolic.svg</file>
+    <file>icons/scalable/places/network-server-symbolic.svg</file>
+    <file>icons/scalable/places/user-trash-symbolic.svg</file>
+    <file>icons/scalable/status/dialog-information-symbolic.svg</file>
+    <file>icons/scalable/status/dialog-password-symbolic.svg</file>
+    <file>icons/scalable/status/dialog-warning-symbolic.svg</file>
+    <file>icons/scalable/status/folder-open-symbolic.svg</file>
+    <file>icons/scalable/status/network-offline-symbolic.svg</file>
+    <file>icons/scalable/status/network-vpn-symbolic.svg</file>
+
+    <!-- The app's own artwork. -->
+    <file>icons/scalable/apps/io.github.fortivpn.Utility-connected.svg</file>
+    <file alias="icons/scalable/apps/io.github.fortivpn.Utility.svg">scalable/apps/io.github.fortivpn.Utility.svg</file>
+    <file alias="icons/scalable/apps/io.github.fortivpn.Utility-symbolic.svg">symbolic/apps/io.github.fortivpn.Utility-symbolic.svg</file>
+    <file alias="icons/scalable/apps/io.github.fortivpn.Utility-disconnected-symbolic.svg">symbolic/apps/io.github.fortivpn.Utility-disconnected-symbolic.svg</file>
+  </gresource>
+</gresources>

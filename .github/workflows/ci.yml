@@ -1,0 +1,190 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  lint:
+    name: Format, Clippy, and metadata
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install GTK, libadwaita, and validators
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-4-dev libadwaita-1-dev desktop-file-utils appstream shellcheck
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: make validate
+      - run: shellcheck scripts/*.sh scripts/third-party-licenses
+      - name: Third-party licenses
+        run: sh scripts/third-party-licenses >/dev/null
+
+  test:
+    name: Core and testkit tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked -p forti-vpn-core -p forti-vpn-testkit
+
+  app:
+    name: App on ${{ matrix.image }}
+    runs-on: ubuntu-24.04
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Their rustc is older than the minimum, 1.92.
+          - { image: 'ubuntu:24.04', packages: apt, rustup: true }
+          - { image: 'debian:trixie', packages: apt, rustup: true }
+          - { image: 'ubuntu:26.04', packages: apt-rust }
+          - { image: 'fedora:latest', packages: dnf }
+          - { image: 'archlinux:latest', packages: pacman }
+          - { image: 'opensuse/tumbleweed', packages: zypper }
+    env:
+      FORTI_VPN_DBUS_TESTS: '1'
+      # Fail instead of skipping when the UI tests cannot open a display.
+      FORTI_VPN_UI_TESTS: '1'
+      GSK_RENDERER: cairo
+      PACKAGES: ${{ matrix.packages }}
+    steps:
+      # Before checkout, which needs git in the container.
+      - name: Install build and test dependencies
+        run: |
+          case $PACKAGES in
+            apt | apt-rust)
+              set -- ca-certificates curl git gcc libc6-dev make pkg-config libgtk-4-dev \
+                libadwaita-1-dev xvfb xauth dbus libgl1-mesa-dri fonts-dejavu-core \
+                adwaita-icon-theme
+              [ "$PACKAGES" = apt ] || set -- "$@" cargo rustc
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update
+              apt-get install -y --no-install-recommends "$@"
+              ;;
+            dnf)
+              dnf install -y git gcc make pkgconf-pkg-config gtk4-devel libadwaita-devel \
+                cargo rust xorg-x11-server-Xvfb xorg-x11-xauth dbus-daemon mesa-dri-drivers \
+                adwaita-icon-theme dejavu-sans-fonts
+              ;;
+            pacman)
+              pacman -Syu --noconfirm --needed git base-devel rust gtk4 libadwaita \
+                xorg-server-xvfb xorg-xauth dbus mesa adwaita-icon-theme ttf-dejavu
+              ;;
+            zypper)
+              zypper --non-interactive install git gcc make pkg-config gtk4-devel \
+                libadwaita-devel cargo rust xvfb-run xauth dbus-1-daemon Mesa-dri \
+                adwaita-icon-theme dejavu-fonts
+              ;;
+          esac
+      - name: Install Rust with rustup
+        if: matrix.rustup
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
+            sh -s -- -y --profile minimal --default-toolchain stable
+          echo "$HOME/.cargo/bin" >>"$GITHUB_PATH"
+      - uses: actions/checkout@v7
+      - run: cargo --version
+      - run: cargo build --locked -p forti-vpn
+      - name: UI and tray tests
+        run: xvfb-run -a dbus-run-session -- cargo test --locked -p forti-vpn
+
+  msrv:
+    # AlmaLinux 10 ships Rust 1.92, the oldest supported version, and has no
+    # Xvfb, so this job only builds and runs the toolkit-free tests.
+    name: Rust 1.92 on almalinux:10
+    runs-on: ubuntu-24.04
+    container: almalinux:10
+    steps:
+      - name: Install build dependencies (EPEL and CRB)
+        run: |
+          dnf install -y epel-release dnf-plugins-core
+          dnf config-manager --set-enabled crb
+          dnf install -y git gcc make pkgconf-pkg-config gtk4-devel libadwaita-devel \
+            cargo rust
+      - uses: actions/checkout@v7
+      # A newer AlmaLinux release brings a newer Rust; without this check the
+      # job would go on passing without testing the minimum.
+      - name: Check that rustc is the minimum version in Cargo.toml
+        run: |
+          minimum=$(sed -n 's/^rust-version = "\([0-9]*\.[0-9]*\).*/\1/p' Cargo.toml)
+          found=$(rustc --version)
+          cargo --version
+          echo "$found"
+          if [ -z "$minimum" ]; then
+            echo '::error::Cargo.toml has no rust-version.'
+            exit 1
+          fi
+          case $found in
+            "rustc $minimum."*) ;;
+            *)
+              echo "::error::This job must test Rust $minimum.x, the rust-version in Cargo.toml, but almalinux:10 has $found. Install Rust $minimum with rustup in this job, or raise the minimum."
+              exit 1
+              ;;
+          esac
+      - run: cargo build --locked -p forti-vpn
+      - run: cargo test --locked -p forti-vpn-core
+
+  flatpak-sources:
+    name: Flatpak cargo sources
+    runs-on: ubuntu-24.04
+    env:
+      # flatpak/flatpak-builder-tools, which publishes no releases.
+      GENERATOR: https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/41c20aa10819cdb2a4f3ca171758a96d1955c018/cargo/flatpak-cargo-generator.py
+    steps:
+      - uses: actions/checkout@v7
+      - name: Generate cargo-sources.json from Cargo.lock
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-aiohttp python3-tomlkit
+          curl -fsSL -o "$RUNNER_TEMP/flatpak-cargo-generator.py" "$GENERATOR"
+          python3 "$RUNNER_TEMP/flatpak-cargo-generator.py" Cargo.lock \
+            -o packaging/flatpak/cargo-sources.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: flatpak-cargo-sources
+          path: packaging/flatpak/cargo-sources.json
+          if-no-files-found: error
+
+  flatpak:
+    name: Flatpak (experimental)
+    needs: flatpak-sources
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: flatpak-cargo-sources
+          path: packaging/flatpak
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          manifest-path: packaging/flatpak/io.github.fortivpn.Utility.yml
+          bundle: io.github.fortivpn.Utility.flatpak

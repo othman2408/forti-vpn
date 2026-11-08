@@ -2,8 +2,11 @@
 Type=Application
 Name=Forti VPN
 Comment=Daily FortiClient VPN operations
+Keywords=VPN;FortiClient;FortiGate;SSL VPN;Network;Tunnel;
 Exec=forti-vpn
 Icon=io.github.fortivpn.Utility
 Terminal=false
 Categories=Network;
 StartupNotify=true
+StartupWMClass=io.github.fortivpn.Utility
+SingleMainWindow=true

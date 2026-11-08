@@ -1,0 +1,156 @@
+#!/bin/sh
+# Write the license texts of the Rust crates compiled into the forti-vpn
+# binary, for packages to ship next to LICENSE.
+#
+# The crate list comes from `cargo tree`: the normal dependencies of
+# forti-vpn for the host target. Build scripts, build dependencies and
+# procedural macros only run while compiling, so they are left out, like
+# Fedora's cargo license summaries do. Each crate's directory, and so its
+# license files, comes from `cargo metadata`, which works the same with the
+# registry cache, `cargo vendor` and flatpak-cargo-generator sources.
+set -eu
+
+usage() {
+    cat <<'EOF'
+Usage: scripts/third-party-licenses [-o FILE]
+
+Write the licenses of every crate compiled into forti-vpn to FILE
+(default: standard output). Set CARGO to pass cargo options, for example
+CARGO='cargo --offline'.
+EOF
+}
+
+die() {
+    printf 'third-party-licenses: %s\n' "$*" >&2
+    exit 1
+}
+
+output=
+while [ $# -gt 0 ]; do
+    case $1 in
+        -o | --output)
+            [ $# -ge 2 ] || die "$1 needs a file name"
+            output=$2
+            shift 2
+            ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        *)
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+
+cargo=${CARGO:-cargo}
+manifest=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)/Cargo.toml
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# $cargo holds a command and its options, so it is split on purpose.
+# shellcheck disable=SC2086
+host=$($cargo -vV | sed -n 's/^host: //p')
+[ -n "$host" ] || die "cannot read the host target from '$cargo -vV'"
+
+# Lines are "name vVERSION[ (source)]|license|repository". The first line is
+# forti-vpn itself.
+# shellcheck disable=SC2086
+$cargo tree --locked --manifest-path "$manifest" --package forti-vpn \
+    --target "$host" --edges normal,no-proc-macro --prefix none --no-dedupe \
+    --format '{p}|{l}|{r}' >"$work/tree"
+app=$(sed -n '1s/^forti-vpn v\([^ |]*\).*/\1/p' "$work/tree")
+[ -n "$app" ] || die "cargo tree did not start with forti-vpn"
+
+# Path dependencies are this project's own crates, covered by LICENSE.
+grep -v '^[^|]* (/' "$work/tree" | LC_ALL=C sort -u >"$work/crates"
+[ -s "$work/crates" ] || die "cargo tree listed no third-party crates"
+
+# shellcheck disable=SC2086
+$cargo metadata --locked --manifest-path "$manifest" --format-version 1 \
+    --filter-platform "$host" >"$work/metadata"
+grep -o '"manifest_path":"[^"]*"' "$work/metadata" |
+    sed 's/^"manifest_path":"//; s/"$//; s,/Cargo\.toml$,,' >"$work/dirs"
+
+# Registries and vendor directories name crate directories NAME-VERSION.
+crate_dir() {
+    awk -v want="/$1" '
+        length($0) >= length(want) && substr($0, length($0) - length(want) + 1) == want {
+            print
+            exit
+        }' "$work/dirs"
+}
+
+license_files() {
+    find "$1" -maxdepth 1 -type f \( -iname 'licen[cs]e*' -o -iname 'copying*' \
+        -o -iname 'copyright*' -o -iname 'unlicense*' -o -iname 'notice*' \) |
+        LC_ALL=C sort
+}
+
+# Identical texts (the gtk-rs crates share theirs) are written once, with
+# the list of crates that use them.
+mkdir "$work/texts"
+: >"$work/order"
+: >"$work/missing"
+while IFS='|' read -r package license repository; do
+    name=${package% v*}
+    version=${package##* v}
+    dir=$(crate_dir "$name-$version")
+    [ -n "$dir" ] || die "no source directory for $name $version"
+    license_files "$dir" >"$work/files"
+    if [ ! -s "$work/files" ]; then
+        printf '%s %s (%s)\n' "$name" "$version" "$license" >>"$work/missing"
+        continue
+    fi
+    while read -r file; do
+        sum=$(sha256sum <"$file" | cut -d ' ' -f 1)
+        if [ ! -e "$work/texts/$sum" ]; then
+            cp "$file" "$work/texts/$sum"
+            printf '%s\n' "$sum" >>"$work/order"
+        fi
+        printf '%s %s (%s)\n' "$name" "$version" "${file##*/}" >>"$work/texts/$sum.users"
+    done <"$work/files"
+done <"$work/crates"
+
+rule='================================================================================'
+
+write_report() {
+    printf 'Third-party licenses for Forti VPN %s\n\n' "$app"
+    cat <<'EOF'
+The forti-vpn program is MIT licensed (see LICENSE). Its binary also
+contains the Rust crates listed below; their license files follow, each
+identical text once. The Rust standard library is compiled in as well and
+is available under the MIT or Apache-2.0 license
+(https://github.com/rust-lang/rust). GTK, libadwaita, GLib and the other
+system libraries are linked dynamically and keep their own licenses.
+
+EOF
+    while IFS='|' read -r package license repository; do
+        line="* ${package% v*} ${package##* v}: $license"
+        [ -z "$repository" ] || line="$line <$repository>"
+        printf '%s\n' "$line"
+    done <"$work/crates"
+    if [ -s "$work/missing" ]; then
+        printf '\nThese crates include no license file; their licenses are as declared:\n'
+        sed 's/^/* /' "$work/missing"
+    fi
+    while read -r sum; do
+        printf '\n%s\n' "$rule"
+        tr '\n' ',' <"$work/texts/$sum.users" | sed 's/,$//; s/,/, /g; s/^/Used by: /' |
+            fold -s -w 80 | sed 's/ $//'
+        printf '\n%s\n\n' "$rule"
+        cat "$work/texts/$sum"
+        # Keep the next rule on its own line.
+        [ -z "$(tail -c 1 "$work/texts/$sum")" ] || printf '\n'
+    done <"$work/order"
+}
+
+if [ -z "$output" ]; then
+    write_report
+else
+    write_report >"$output.tmp"
+    mv -f "$output.tmp" "$output"
+fi

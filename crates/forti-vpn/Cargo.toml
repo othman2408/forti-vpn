@@ -1,0 +1,72 @@
+[package]
+name = "forti-vpn"
+description = "Unofficial native GTK 4 and libadwaita app for FortiClient VPN on Linux"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+[dependencies]
+forti-vpn-core.workspace = true
+gtk.workspace = true
+adw.workspace = true
+async-channel.workspace = true
+glib-unix.workspace = true
+rustix.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[build-dependencies]
+glib-build-tools.workspace = true
+
+[lints]
+workspace = true
+
+# GTK widget tests need the main thread and a display, so they use their
+# own harness: xvfb-run -a dbus-run-session -- cargo test -p forti-vpn --test ui
+[[test]]
+name = "ui"
+harness = false
+
+# Debian and Ubuntu package: cargo deb -p forti-vpn (see docs/releases.md).
+# Built on Ubuntu 24.04, the oldest target, so $auto pins the lowest GTK,
+# libadwaita and glibc versions. THIRD-PARTY-LICENSES.txt comes from
+# scripts/third-party-licenses, which `make build` runs.
+[package.metadata.deb]
+maintainer = "othman2408 <acerxr@gmail.com>"
+extended-description = """\
+Forti VPN is an unofficial desktop app for the FortiClient VPN command-line \
+client: connect and disconnect with password and MFA prompts, manage VPN \
+profiles, keep a tray icon, and copy sanitized diagnostics. FortiClient is \
+not included and is not a dependency of this package: install it separately \
+from Fortinet. The app guides you through setup when the FortiClient CLI is \
+missing. Not affiliated with Fortinet."""
+section = "net"
+priority = "optional"
+# librsvg2-common is gdk-pixbuf's SVG loader, which GTK before 4.20 needs to
+# draw the full-colour app icon.
+depends = "$auto, adwaita-icon-theme, hicolor-icon-theme, librsvg2-common"
+# Suggests only: Recommends would pull GNOME Shell onto KDE or Xfce systems.
+# FortiClient is never a dependency (Fortinet's license terms).
+suggests = "gnome-shell-extension-appindicator, forticlient"
+assets = [
+    ["target/release/forti-vpn", "usr/bin/", "755"],
+    ["../../data/io.github.fortivpn.Utility.desktop", "usr/share/applications/", "644"],
+    ["../../data/io.github.fortivpn.Utility.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["../../data/icons/hicolor/scalable/apps/io.github.fortivpn.Utility.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["../../data/icons/hicolor/symbolic/apps/io.github.fortivpn.Utility-symbolic.svg", "usr/share/icons/hicolor/symbolic/apps/", "644"],
+    ["../../data/icons/hicolor/symbolic/apps/io.github.fortivpn.Utility-disconnected-symbolic.svg", "usr/share/icons/hicolor/symbolic/apps/", "644"],
+    ["../../README.md", "usr/share/doc/forti-vpn/", "644"],
+    ["../../NOTICE", "usr/share/doc/forti-vpn/", "644"],
+    # The DEP-5 copyright file, which also covers the Adwaita icons. The
+    # target is spelled out: cargo-deb generates its own copyright file
+    # unless an asset has exactly this path.
+    ["../../packaging/debian/copyright", "usr/share/doc/forti-vpn/copyright", "644"],
+    ["target/release/THIRD-PARTY-LICENSES.txt", "usr/share/doc/forti-vpn/", "644"],
+]

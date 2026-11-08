@@ -1,0 +1,46 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.92"
+license = "MIT"
+authors = ["othman2408"]
+repository = "https://github.com/othman2408/forti-vpn"
+homepage = "https://github.com/othman2408/forti-vpn"
+
+[workspace.dependencies]
+forti-vpn-core = { path = "crates/forti-vpn-core" }
+# GTK 4.14 and libadwaita 1.5 are the oldest libraries this app supports
+# (Ubuntu 24.04 LTS). Newer distributions satisfy them at runtime.
+gtk = { package = "gtk4", version = "0.11.5", features = ["v4_14"] }
+adw = { package = "libadwaita", version = "0.9.2", features = ["v1_5"] }
+async-channel = "2.5"
+glib-build-tools = "0.22.8"
+glib-unix = "0.22.8"
+regex = "1.13"
+rustix = { version = "1.1.6", features = ["pty", "termios", "process", "event", "fs"] }
+serde_json = "1.0.154"
+tempfile = "3"
+zeroize = "1.9"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+
+[profile.dev]
+# Keep debug builds small; line tables are enough for backtraces.
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.release]
+lto = "thin"
+codegen-units = 1

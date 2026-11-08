@@ -1,4 +1,17 @@
-__pycache__/
-*.py[cod]
+/target/
+/dist/
 .cache/
-dist/
+# Offline builds (make vendor) and Flatpak builds.
+/vendor/
+/.cargo/config.toml
+/.cargo/vendor.toml
+/packaging/flatpak/cargo-sources.json
+/.flatpak-builder/
+/build-dir/
+/flatpak_app/
+/repo/
+# makepkg run inside packaging/arch.
+/packaging/arch/src/
+/packaging/arch/pkg/
+/packaging/arch/*.tar.gz
+/packaging/arch/*.pkg.tar.*

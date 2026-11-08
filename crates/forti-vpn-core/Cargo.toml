@@ -1,0 +1,22 @@
+[package]
+name = "forti-vpn-core"
+description = "FortiClient CLI integration and toolkit-independent logic for Forti-VPN"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+regex.workspace = true
+rustix.workspace = true
+serde_json.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

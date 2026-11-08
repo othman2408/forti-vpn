@@ -1,0 +1,55 @@
+name: Packages
+
+# Builds the .deb, .rpm, and Arch package from the working tree when a change
+# can break them, so the release workflow does not find the breakage first.
+# data/ and the manifests are packaged too, and build-packages.sh checks that
+# the versions in Cargo.toml and the packaging agree.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packaging/**'
+      - 'scripts/**'
+      - 'data/**'
+      - 'Makefile'
+      - 'Cargo.toml'
+      - 'crates/forti-vpn/Cargo.toml'
+      - '.github/workflows/packages.yml'
+  pull_request:
+    paths:
+      - 'packaging/**'
+      - 'scripts/**'
+      - 'data/**'
+      - 'Makefile'
+      - 'Cargo.toml'
+      - 'crates/forti-vpn/Cargo.toml'
+      - '.github/workflows/packages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: packages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: ${{ matrix.format }} package
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # deb on ubuntu:24.04, rpm on almalinux:10, arch on archlinux:latest.
+        format: [deb, rpm, arch]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build in a container
+        env:
+          FORMAT: ${{ matrix.format }}
+        run: scripts/build-packages.sh --engine docker --output out "$FORMAT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: package-${{ matrix.format }}
+          path: out/
+          if-no-files-found: error
