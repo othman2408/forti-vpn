@@ -34,7 +34,7 @@ pub struct SetupDialog {
     command: RefCell<Option<String>>,
     showing_help: Cell<bool>,
     pub content: ContentDialog,
-    pub pages: gtk::Stack,
+    pub pages: Pages,
     recovery_page: gtk::Box,
     pub recovery_title: gtk::Label,
     pub recovery_details: gtk::Label,
@@ -158,18 +158,61 @@ struct InstallPage {
     command_label: gtk::Label,
 }
 
+/// The dialog's pages, one visible at a time. Not a `GtkStack`: GTK 4.14's
+/// stack asked for far more width than any of its pages (1265 px for pages
+/// needing 301 px with large text), so the dialog overflowed narrow windows
+/// on Ubuntu 24.04.
+pub struct Pages {
+    pub container: gtk::Box,
+    pages: Vec<(&'static str, gtk::Widget)>,
+}
+
+impl Pages {
+    fn new<const N: usize>(pages: [(&'static str, &gtk::Widget); N]) -> Self {
+        let container = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        for (_, page) in pages {
+            container.append(page);
+        }
+        let pages = Self {
+            container,
+            pages: pages
+                .into_iter()
+                .map(|(name, page)| (name, page.clone()))
+                .collect(),
+        };
+        if let Some((first, _)) = pages.pages.first() {
+            pages.set_visible_child_name(first);
+        }
+        pages
+    }
+
+    pub fn visible_child_name(&self) -> Option<String> {
+        self.pages
+            .iter()
+            .find(|(_, page)| page.is_visible())
+            .map(|(name, _)| (*name).to_owned())
+    }
+
+    pub fn set_visible_child_name(&self, name: &str) {
+        for (page_name, page) in &self.pages {
+            page.set_visible(*page_name == name);
+        }
+    }
+}
+
 impl SetupDialog {
     pub(crate) fn new(window: &Rc<MainWindow>) -> Rc<Self> {
         let guide = install_guide(window.platform());
         let content = ContentDialog::new("Set Up FortiClient", 440);
-        let pages = gtk::Stack::builder().vhomogeneous(false).build();
-        content.body.append(&pages);
         let (ready, ready_help) = ready_page();
-        pages.add_named(&ready, Some(READY));
         let recovery = RecoveryPage::build(service_command(window.platform()));
-        pages.add_named(&recovery.page, Some(RECOVERY));
         let install = InstallPage::build(&guide);
-        pages.add_named(&install.page, Some(INSTALL));
+        let pages = Pages::new([
+            (READY, ready.upcast_ref()),
+            (RECOVERY, recovery.page.upcast_ref()),
+            (INSTALL, install.page.upcast_ref()),
+        ]);
+        content.body.append(&pages.container);
         let check_status = widgets::message_label(None);
         content
             .footer
